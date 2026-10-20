@@ -31,6 +31,7 @@ export component Rail inherits VerticalLayout {
     for item in root.items: IconButton {
         icon: item.icon;
         label: item.label;
+        Tooltip { text: @markdown("\{parent.label}"); }
         size: 48px;
         outlined: true;
         active: root.current == item.page;
@@ -42,6 +43,7 @@ export component Rail inherits VerticalLayout {
     IconButton {
         icon: Icons.settings;
         label: "Settings";
+        Tooltip { text: @markdown("\{parent.label}"); }
         size: 48px;
         outlined: true;
         active: root.current == Page.settings;
@@ -50,6 +52,7 @@ export component Rail inherits VerticalLayout {
     IconButton {
         icon: Icons.close;
         label: "End task";
+        Tooltip { text: @markdown("\{parent.label}"); }
         size: 48px;
         danger: true;
         clicked => { root.end-task(); }
