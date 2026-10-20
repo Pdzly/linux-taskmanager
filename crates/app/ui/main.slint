@@ -160,11 +160,11 @@ export component MainWindow inherits Window {
                     user-initials: root.user-initials;
                     summary: root.summary;
                     refresh-changed(i) => { root.refresh-changed(i); }
-                // The quick toggle picks an explicit theme and remembers it.
-                theme-toggled => {
-                    root.theme-choice = Theme.dark ? 1 : 2;
-                    root.settings-changed();
-                }
+                    // The quick toggle picks an explicit theme and remembers it.
+                    theme-toggled => {
+                        root.theme-choice = Theme.dark ? 1 : 2;
+                        root.settings-changed();
+                    }
                 }
             }
 
