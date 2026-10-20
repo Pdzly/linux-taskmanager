@@ -18,7 +18,7 @@
 
 - **Processes**: apps (detected from their desktop entries), background and system processes, grouped and expandable, with CPU, memory, disk and GPU use, heat-map cells, sorting and search.
 - **Performance**: live CPU (total and per thread), memory, every disk and network adapter, and GPUs (Intel and AMD through the kernel, NVIDIA through NVML).
-- **Process actions** (right-click): End task, End process tree, Kill, Suspend/Resume, Efficiency mode, priority, CPU affinity, Open file location, Properties, Run new task. Actions on other users' processes ask for your password through polkit.
+- **Process actions**: the **End task** split button keeps SIGTERM (15) as its main action. Its dropdown offers End task (SIGTERM, 15), Kill process (SIGKILL, 9, with confirmation), Suspend (SIGSTOP), and Resume (SIGCONT) on both Processes and Details. Right-click for those actions plus End process tree, Efficiency mode, priority, CPU affinity, Open file location, Properties, and Run new task. Actions on other users' processes ask for your password through polkit.
 - **Details**: every process, kernel threads included, with PID, user, threads, nice value and command line.
 - **Services**: system and user systemd services; start, stop, restart, enable and disable.
 - **Startup apps**: switch autostart entries on and off.

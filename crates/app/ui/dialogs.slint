@@ -1,5 +1,6 @@
 import { Theme } from "theme.slint";
-import { Card, Chip } from "components.slint";
+import { Card, Chip, Icon } from "components.slint";
+import { Icons } from "icons.slint";
 import { Metric } from "types.slint";
 
 // Pill button for dialogs and page headers.
@@ -31,6 +32,152 @@ export component Button inherits Rectangle {
         enabled: root.enabled;
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+// Connected primary action and signal picker for process controls.
+export component ProcessActionButton inherits Rectangle {
+    in property <bool> enabled: true;
+    callback request(string);
+
+    height: 40px;
+    min-width: end-task-label.preferred-width + 72px;
+    border-radius: self.height / 2;
+    clip: true;
+    opacity: root.enabled ? 1 : 0.4;
+    background: Theme.text;
+
+    // Retains native menu focus, keyboard navigation, Escape, and click-away
+    // behavior while the arrow requests it explicitly.
+    menu-area := ContextMenuArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+
+        Menu {
+            MenuItem {
+                title: "End task (SIGTERM, 15)";
+                enabled: root.enabled;
+                activated => { root.request("end"); }
+            }
+            MenuItem {
+                title: "Kill process (SIGKILL, 9)";
+                enabled: root.enabled;
+                activated => { root.request("kill"); }
+            }
+            MenuItem {
+                title: "Suspend (SIGSTOP)";
+                enabled: root.enabled;
+                activated => { root.request("suspend"); }
+            }
+            MenuItem {
+                title: "Resume (SIGCONT)";
+                enabled: root.enabled;
+                activated => { root.request("resume"); }
+            }
+        }
+    }
+
+    primary-action := Rectangle {
+        x: 0px;
+        width: root.width - 36px;
+        height: parent.height;
+        background: primary-hit.has-hover || primary-focus.has-focus
+            ? Theme.card.with-alpha(0.14) : transparent;
+        accessible-role: button;
+        accessible-label: "End task";
+        accessible-action-default => {
+            if root.enabled {
+                root.request("end");
+            }
+        }
+
+        primary-focus := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.enabled;
+            focus-on-click: true;
+            focus-on-tab-navigation: true;
+            key-pressed(event) => {
+                if event.text == Key.Return || event.text == Key.Space {
+                    root.request("end");
+                    return accept;
+                }
+                reject
+            }
+
+            end-task-label := Text {
+                width: parent.width;
+                text: "End task";
+                font-size: 13.5px;
+                font-weight: 500;
+                color: Theme.card;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            primary-hit := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                clicked => {
+                    primary-focus.focus();
+                    root.request("end");
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: root.width - 36px;
+        y: 8px;
+        width: 1px;
+        height: root.height - 16px;
+        background: Theme.card.with-alpha(0.32);
+    }
+
+    signal-menu := Rectangle {
+        x: root.width - 36px;
+        width: 36px;
+        height: parent.height;
+        background: signal-menu-hit.has-hover || signal-menu-focus.has-focus
+            ? Theme.card.with-alpha(0.14) : transparent;
+        accessible-role: button;
+        accessible-label: "Choose process signal";
+        accessible-action-default => {
+            if root.enabled {
+                menu-area.show({ x: root.width - 36px, y: root.height });
+            }
+        }
+
+        signal-menu-focus := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            enabled: root.enabled;
+            focus-on-click: true;
+            focus-on-tab-navigation: true;
+            key-pressed(event) => {
+                if event.text == Key.Return || event.text == Key.Space || event.text == Key.DownArrow {
+                    menu-area.show({ x: root.width - 36px, y: root.height });
+                    return accept;
+                }
+                reject
+            }
+
+            Icon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                glyph: Icons.chevron-down;
+                size: 16px;
+                tint: Theme.card;
+            }
+            signal-menu-hit := TouchArea {
+                enabled: root.enabled;
+                mouse-cursor: pointer;
+                clicked => {
+                    signal-menu-focus.focus();
+                    menu-area.show({ x: root.width - 36px, y: root.height });
+                }
+            }
+        }
     }
 }
 

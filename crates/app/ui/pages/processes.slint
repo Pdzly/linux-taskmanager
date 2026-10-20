@@ -3,7 +3,7 @@ import { Theme } from "../theme.slint";
 import { Card, Icon, Badge } from "../components.slint";
 import { Icons } from "../icons.slint";
 import { SearchField, HeaderCell, HeatCell, Cell, ProcessMenu } from "../table.slint";
-import { Button } from "../dialogs.slint";
+import { ProcessActionButton } from "../dialogs.slint";
 import { ProcRow, ProcTotals } from "../types.slint";
 
 // Shared column widths for header and rows.
@@ -147,11 +147,9 @@ export component ProcessesPage inherits Card {
             Rectangle { horizontal-stretch: 1; }
             VerticalLayout {
                 alignment: center;
-                Button {
-                    text: "End task";
-                    primary: true;
+                ProcessActionButton {
                     enabled: root.selected-key != "";
-                    clicked => { root.request("end", root.selected-key); }
+                    request(action) => { root.request(action, root.selected-key); }
                 }
             }
             VerticalLayout {
