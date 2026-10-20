@@ -60,8 +60,11 @@ assets = [
 # Fedora / openSUSE / RHEL package: `packaging/build-all.sh` runs cargo-generate-rpm.
 [package.metadata.generate-rpm]
 summary = "A modern task manager for Linux"
-# pkexec ships in the "polkit" package on RPM distros.
-requires = { polkit = "*" }
+# Dependencies are declared by hand, by library soname and file path (not package
+# name) so they resolve on Fedora, RHEL and openSUSE alike. The automatic scan ran
+# ldd on the build machine and recorded fontconfig's own dependencies under
+# Ubuntu's sonames (libbz2.so.1.0), which Fedora 44 can't satisfy.
+auto-req = "no"
 assets = [
     { source = "target/release/taskmonitor", dest = "/usr/bin/taskmonitor", mode = "755" },
     { source = "target/release/taskmonitor-helper", dest = "/usr/libexec/taskmonitor-helper", mode = "755" },
@@ -82,6 +85,14 @@ assets = [
     { source = "fonts/OFL.txt", dest = "/usr/share/licenses/taskmonitor/Mona-Sans-OFL.txt", mode = "644" },
     { source = "fonts/LUCIDE-LICENSE", dest = "/usr/share/licenses/taskmonitor/Lucide-LICENSE", mode = "644" },
 ]
+
+[package.metadata.generate-rpm.requires]
+"libc.so.6(GLIBC_2.28)(64bit)" = "*"
+"libfontconfig.so.1()(64bit)" = "*"
+# Loaded at runtime (not linked) for keyboard input.
+"libxkbcommon.so.0()(64bit)" = "*"
+# Runs the helper for actions on other users' processes.
+"/usr/bin/pkexec" = "*"
 
 [features]
 # In-process CPU profiler for the headless benchmark (`TASKMONITOR_BENCH=1`).
