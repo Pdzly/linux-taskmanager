@@ -1,8 +1,8 @@
-# Arch Linux / Manjaro / EndeavourOS recipe. Builds from source with the system Rust.
-# Publishing to the AUR needs a public source URL: set _repo below, then
-# `makepkg --printsrcinfo > .SRCINFO` and push both files to aur.archlinux.org/taskmonitor.git.
-# To build locally from this checkout instead: `makepkg -si` with source=() pointing at it.
-_repo=https://github.com/YOUR-NAME/taskmonitor
+# Arch Linux / Manjaro / EndeavourOS recipe. Builds a release from source with the system Rust.
+# Install: copy this file into an empty folder and run `makepkg -si`.
+# Publish to the AUR: `makepkg --printsrcinfo > .SRCINFO`, then push PKGBUILD and .SRCINFO
+# to ssh://aur@aur.archlinux.org/taskmonitor.git. Bump pkgver and sha256sums per release.
+_repo=https://github.com/anuzdhk/linux-taskmanager
 pkgname=taskmonitor
 pkgver=0.1.0
 pkgrel=1
@@ -13,24 +13,26 @@ license=('MIT')
 depends=('fontconfig' 'libxkbcommon' 'polkit' 'hicolor-icon-theme')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::$_repo/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('cbeb4c51c0d410fb3e7e4b61f1d2451d8a249ab2cc82d42bad87f38456b10dc7')
+# GitHub names the unpacked folder after the repository.
+_dir="linux-taskmanager-$pkgver"
 
 prepare() {
-    cd "$pkgname-$pkgver"
+    cd "$_dir"
     cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-    cd "$pkgname-$pkgver"
+    cd "$_dir"
     cargo build --frozen --release -p taskmonitor -p taskmonitor-helper
 }
 
 check() {
-    cd "$pkgname-$pkgver"
+    cd "$_dir"
     cargo test --frozen --release -p taskmonitor-core
 }
 
 package() {
-    cd "$pkgname-$pkgver"
+    cd "$_dir"
     packaging/stage.sh target/release "$pkgdir/usr"
 }
