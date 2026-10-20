@@ -1,0 +1,81 @@
+<p align="center">
+  <img src="packaging/icons/hicolor/128x128/apps/io.github.taskmonitor.png" width="96" alt="TaskMonitor logo">
+</p>
+
+<h1 align="center">TaskMonitor</h1>
+
+<p align="center">A modern, lightweight task manager for Linux: everything Windows Task Manager does, in a clean card-based UI.</p>
+
+![Processes](docs/screenshots/processes.png)
+
+| Performance | Services |
+|---|---|
+| ![Performance](docs/screenshots/performance.png) | ![Services](docs/screenshots/services.png) |
+| **Startup apps** | **Dark theme** |
+| ![Startup apps](docs/screenshots/startup.png) | ![Dark theme](docs/screenshots/performance-dark.png) |
+
+## Features
+
+- **Processes**: apps (detected from their desktop entries), background and system processes, grouped and expandable, with CPU, memory, disk and GPU use, heat-map cells, sorting and search.
+- **Performance**: live CPU (total and per thread), memory, every disk and network adapter, and GPUs (Intel and AMD through the kernel, NVIDIA through NVML).
+- **Process actions** (right-click): End task, End process tree, Kill, Suspend/Resume, Efficiency mode, priority, CPU affinity, Open file location, Properties, Run new task. Actions on other users' processes ask for your password through polkit.
+- **Details**: every process, kernel threads included, with PID, user, threads, nice value and command line.
+- **Services**: system and user systemd services; start, stop, restart, enable and disable.
+- **Startup apps**: switch autostart entries on and off.
+- **Users**: signed-in sessions with per-user CPU and memory; lock or sign out.
+- **App history** (opt-in): CPU, disk and GPU time per app, kept only on your computer.
+- Light and dark themes, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Delete ends the selected task, Esc closes dialogs).
+
+TaskMonitor is written in Rust with [Slint](https://slint.dev). It uses about 1–2% of one CPU core and around 35 MB of memory, and it doesn't wake a sleeping laptop GPU.
+
+## Install
+
+Download a package from the [Releases](https://github.com/anuzdhk/linux-taskmanager/releases) page:
+
+| Distro | File | Install |
+|---|---|---|
+| Any | `TaskMonitor-<version>-x86_64.AppImage` | `chmod +x TaskMonitor-*.AppImage`, then run it |
+| Ubuntu, Debian, Mint, Pop!_OS | `taskmonitor_<version>-1_amd64.deb` | `sudo apt install ./taskmonitor_*.deb` |
+| Fedora, RHEL, openSUSE | `taskmonitor-<version>-1.x86_64.rpm` | `sudo dnf install ./taskmonitor-*.rpm` |
+| Arch, Manjaro, EndeavourOS | [`packaging/aur/PKGBUILD`](packaging/aur/PKGBUILD) | `makepkg -si` |
+| Anything else | `taskmonitor-<version>-x86_64.tar.gz` | unpack, then `sudo ./install.sh` |
+
+The packages run on any x86_64 distro from 2018 onwards (glibc 2.28 or newer). The Services and Users pages need systemd. Admin actions need polkit, and they aren't available in the AppImage.
+
+## Build from source
+
+You need Rust (via [rustup](https://rustup.rs)) and, on Debian/Ubuntu:
+
+```sh
+sudo apt install build-essential pkg-config libfontconfig1-dev libxkbcommon-dev
+```
+
+```sh
+cargo run --release -p taskmonitor
+```
+
+Build every package into `dist/` (also needs `zig`, `squashfs-tools`, `cargo install cargo-zigbuild cargo-deb cargo-generate-rpm`):
+
+```sh
+./packaging/build-all.sh
+```
+
+## Project layout
+
+| Path | What's there |
+|---|---|
+| `crates/core` | System data: `/proc` and `/sys` parsers, process, GPU, services, startup and session sources. No UI code. |
+| `crates/app` | The Slint UI (`ui/`) and the glue that feeds it (`src/`). |
+| `crates/helper` | The small root helper that `pkexec` runs for actions on processes you don't own. |
+| `packaging` | Desktop entry, icons, polkit policy, AppStream metadata, build scripts, AUR recipe. |
+| `IMPLEMENTATION_PLAN.md` | Design decisions, milestones and measurements. |
+
+## Credits
+
+- UI toolkit: [Slint](https://slint.dev)
+- Font: [Mona Sans](https://github.com/github/mona-sans) (SIL Open Font License)
+- Icons: [Lucide](https://lucide.dev) (ISC License)
+
+## License
+
+Not chosen yet. Until a license is added, all rights are reserved by the author.
