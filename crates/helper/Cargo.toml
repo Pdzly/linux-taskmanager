@@ -3,6 +3,7 @@ name = "taskmonitor-helper"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 taskmonitor-core = { path = "../core" }

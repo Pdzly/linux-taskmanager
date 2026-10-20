@@ -78,4 +78,6 @@ Build every package into `dist/` (also needs `zig`, `squashfs-tools`, `cargo ins
 
 ## License
 
-Not chosen yet. Until a license is added, all rights are reserved by the author.
+TaskMonitor is released under the [MIT License](LICENSE).
+
+It is built with [Slint](https://slint.dev), used under the [Slint Royalty-free Desktop, Mobile, and Web Applications License](https://slint.dev/terms-and-conditions#royalty-free), which asks for attribution: the app shows Slint's "About Slint" panel in Settings. Mona Sans is under the SIL Open Font License and Lucide icons under the ISC License; both licence texts are installed with every package.

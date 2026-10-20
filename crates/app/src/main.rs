@@ -29,6 +29,7 @@ fn main() -> Result<(), slint::PlatformError> {
     // Lets the desktop match the window to io.github.taskmonitor.desktop (name and icon).
     // Needs the platform that MainWindow::new() set up, and must happen before showing.
     slint::set_xdg_app_id("io.github.taskmonitor")?;
+    ui.set_version(env!("CARGO_PKG_VERSION").into());
 
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     let initials: String = user.chars().take(2).collect::<String>().to_uppercase();

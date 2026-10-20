@@ -1,3 +1,4 @@
+import { AboutSlint } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Card, Chip, Switch } from "../components.slint";
 
@@ -53,6 +54,7 @@ export component SettingsPage inherits Card {
     in-out property <int> start-page;
     in-out property <bool> always-on-top;
     in-out property <bool> app-history;
+    in property <string> version;
     callback changed();
 
     VerticalLayout {
@@ -112,6 +114,15 @@ export component SettingsPage inherits Card {
             toggled => {
                 root.app-history = !root.app-history;
                 root.changed();
+            }
+        }
+        Section {
+            title: "About";
+            note: "TaskMonitor " + root.version + " · MIT License · github.com/anuzdhk/linux-taskmanager";
+            // Attribution required by the Slint royalty-free licence.
+            HorizontalLayout {
+                alignment: start;
+                AboutSlint { }
             }
         }
         Section {

@@ -4,6 +4,7 @@
   <name>TaskMonitor</name>
   <summary>A modern task manager for Linux</summary>
   <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
   <developer id="io.github.taskmonitor">
     <name>anuz</name>
   </developer>

@@ -33,6 +33,7 @@ export component MainWindow inherits Window {
     default-font-family: "Mona Sans";
     default-font-size: 14px;
 
+    in property <string> version;
     in property <string> user-name;
     in property <string> user-initials;
     in property <Summary> summary: { cpu: "—", ram: "—", gpu: "—", uptime: "—" };
@@ -279,6 +280,7 @@ export component MainWindow inherits Window {
                     start-page <=> root.start-page;
                     always-on-top <=> root.on-top;
                     app-history <=> root.app-history;
+                    version: root.version;
                     changed => { root.settings-changed(); }
                 }
             }

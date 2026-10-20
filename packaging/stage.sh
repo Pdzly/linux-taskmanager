@@ -16,5 +16,6 @@ for dir in "$here"/icons/hicolor/*/apps; do
         install -Dm644 "$f" "$usr/share/icons/hicolor/$size/apps/$(basename "$f")"
     done
 done
+install -Dm644 "$here/../LICENSE" "$usr/share/licenses/taskmonitor/LICENSE"
 install -Dm644 "$here/../crates/app/fonts/OFL.txt" "$usr/share/licenses/taskmonitor/Mona-Sans-OFL.txt"
 install -Dm644 "$here/../crates/app/fonts/LUCIDE-LICENSE" "$usr/share/licenses/taskmonitor/Lucide-LICENSE"

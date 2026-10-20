@@ -4,6 +4,7 @@ description = "A modern task manager for Linux"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 taskmonitor-core = { path = "../core" }
@@ -51,6 +52,7 @@ assets = [
     ["../../packaging/icons/hicolor/128x128/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
     ["../../packaging/icons/hicolor/256x256/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
     ["../../packaging/icons/hicolor/512x512/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+    ["../../LICENSE", "usr/share/doc/taskmonitor/LICENSE", "644"],
     ["fonts/OFL.txt", "usr/share/doc/taskmonitor/fonts/Mona-Sans-OFL.txt", "644"],
     ["fonts/LUCIDE-LICENSE", "usr/share/doc/taskmonitor/fonts/Lucide-LICENSE", "644"],
 ]
@@ -58,8 +60,6 @@ assets = [
 # Fedora / openSUSE / RHEL package: `packaging/build-all.sh` runs cargo-generate-rpm.
 [package.metadata.generate-rpm]
 summary = "A modern task manager for Linux"
-# RPM requires a License tag. Replace once a licence is chosen (see IMPLEMENTATION_PLAN.md).
-license = "LicenseRef-Unspecified"
 # pkexec ships in the "polkit" package on RPM distros.
 requires = { polkit = "*" }
 assets = [
@@ -78,6 +78,7 @@ assets = [
     { source = "../../packaging/icons/hicolor/128x128/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/128x128/apps/io.github.taskmonitor.png", mode = "644" },
     { source = "../../packaging/icons/hicolor/256x256/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.taskmonitor.png", mode = "644" },
     { source = "../../packaging/icons/hicolor/512x512/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/512x512/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../LICENSE", dest = "/usr/share/licenses/taskmonitor/LICENSE", mode = "644" },
     { source = "fonts/OFL.txt", dest = "/usr/share/licenses/taskmonitor/Mona-Sans-OFL.txt", mode = "644" },
     { source = "fonts/LUCIDE-LICENSE", dest = "/usr/share/licenses/taskmonitor/Lucide-LICENSE", mode = "644" },
 ]
