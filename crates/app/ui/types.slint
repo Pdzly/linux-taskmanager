@@ -1,0 +1,51 @@
+// Data the Rust side pushes into the UI each tick. Strings are pre-formatted in Rust.
+
+export struct Summary {
+    cpu: string,
+    ram: string,
+    gpu: string,
+    uptime: string,
+}
+
+export struct CpuView {
+    model: string,
+    usage: string,
+    speed: string,
+    processes: string,
+    threads: string,
+    // SVG path commands in a 0..100 × 0..100 box.
+    graph-line: string,
+    graph-fill: string,
+}
+
+export struct MemView {
+    total: string,
+    used: string,
+    available: string,
+    cached: string,
+    swap: string,
+    used-frac: float,
+    cached-frac: float,
+}
+
+export struct Metric {
+    label: string,
+    value: string,
+    unit: string,
+}
+
+// One disk or network adapter: a chip, a subtitle, numbers and a two-series graph.
+export struct DeviceView {
+    name: string,
+    subtitle: string,
+    metrics: [Metric],
+    line-a: string,
+    fill-a: string,
+    line-b: string,
+    scale: string,
+}
+
+export struct SysView {
+    load1: string,
+    load-detail: string,
+}

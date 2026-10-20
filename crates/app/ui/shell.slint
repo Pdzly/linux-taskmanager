@@ -1,9 +1,11 @@
 import { Theme, Page } from "theme.slint";
-import { IconButton, Badge, Chip } from "components.slint";
+import { IconButton, Badge, Chip, Icon } from "components.slint";
+import { Icons } from "icons.slint";
+import { Summary } from "types.slint";
 
 struct RailItem {
     page: Page,
-    icon: image,
+    icon: string,
     label: string,
 }
 
@@ -13,13 +15,13 @@ export component Rail inherits VerticalLayout {
     callback end-task();
 
     property <[RailItem]> items: [
-        { page: Page.processes, icon: @image-url("icons/processes.svg"), label: "Processes" },
-        { page: Page.performance, icon: @image-url("icons/performance.svg"), label: "Performance" },
-        { page: Page.history, icon: @image-url("icons/history.svg"), label: "App history" },
-        { page: Page.startup, icon: @image-url("icons/startup.svg"), label: "Startup apps" },
-        { page: Page.users, icon: @image-url("icons/users.svg"), label: "Users" },
-        { page: Page.details, icon: @image-url("icons/details.svg"), label: "Details" },
-        { page: Page.services, icon: @image-url("icons/services.svg"), label: "Services" },
+        { page: Page.processes, icon: Icons.processes, label: "Processes" },
+        { page: Page.performance, icon: Icons.performance, label: "Performance" },
+        { page: Page.history, icon: Icons.history, label: "App history" },
+        { page: Page.startup, icon: Icons.startup, label: "Startup apps" },
+        { page: Page.users, icon: Icons.users, label: "Users" },
+        { page: Page.details, icon: Icons.details, label: "Details" },
+        { page: Page.services, icon: Icons.services, label: "Services" },
     ];
 
     width: 52px;
@@ -38,7 +40,7 @@ export component Rail inherits VerticalLayout {
     Rectangle { vertical-stretch: 1; }
 
     IconButton {
-        icon: @image-url("icons/settings.svg");
+        icon: Icons.settings;
         label: "Settings";
         size: 48px;
         outlined: true;
@@ -46,7 +48,7 @@ export component Rail inherits VerticalLayout {
         clicked => { root.selected(Page.settings); }
     }
     IconButton {
-        icon: @image-url("icons/close.svg");
+        icon: Icons.close;
         label: "End task";
         size: 48px;
         danger: true;
@@ -57,10 +59,11 @@ export component Rail inherits VerticalLayout {
 export component TopBar inherits HorizontalLayout {
     in property <string> user-name;
     in property <string> user-initials;
-    in property <string> uptime: "—";
-    in property <string> cpu: "—";
-    in property <string> ram: "—";
-    in property <string> gpu: "—";
+    in property <Summary> summary;
+    // Refresh rate: index into `refresh-labels`; Rust maps it to an interval.
+    in-out property <int> refresh-index: 1;
+    callback refresh-changed(int);
+    property <[string]> refresh-labels: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
 
     height: 60px;
     spacing: 12px;
@@ -88,9 +91,9 @@ export component TopBar inherits HorizontalLayout {
                 vertical-alignment: center;
             }
             Rectangle { width: 6px; }
-            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/cpu.svg"); text: "CPU  " + root.cpu; mono: true; } }
-            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/memory.svg"); text: "RAM  " + root.ram; mono: true; } }
-            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/gpu.svg"); text: "GPU  " + root.gpu; mono: true; } }
+            VerticalLayout { alignment: center; Chip { icon: Icons.cpu; text: "CPU  " + root.summary.cpu; mono: true; } }
+            VerticalLayout { alignment: center; Chip { icon: Icons.memory; text: "RAM  " + root.summary.ram; mono: true; } }
+            VerticalLayout { alignment: center; Chip { icon: Icons.gpu; text: "GPU  " + root.summary.gpu; mono: true; } }
         }
     }
 
@@ -98,8 +101,38 @@ export component TopBar inherits HorizontalLayout {
 
     VerticalLayout {
         alignment: center;
+        Rectangle {
+            height: 48px;
+            border-radius: self.height / 2;
+            background: refresh-ta.has-hover ? Theme.hover : Theme.tile;
+            accessible-role: button;
+            accessible-label: "Refresh rate: " + root.refresh-labels[root.refresh-index];
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 18px;
+                spacing: 8px;
+                VerticalLayout { alignment: center; Icon { glyph: Icons.clock; size: 18px; } }
+                Text {
+                    text: root.refresh-labels[root.refresh-index];
+                    font-family: Theme.mono;
+                    font-size: 13px;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                }
+            }
+            refresh-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => {
+                    root.refresh-index = Math.mod(root.refresh-index + 1, root.refresh-labels.length);
+                    root.refresh-changed(root.refresh-index);
+                }
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
         IconButton {
-            icon: @image-url("icons/search.svg");
+            icon: Icons.search;
             label: "Search";
             size: 48px;
         }
@@ -107,7 +140,7 @@ export component TopBar inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         IconButton {
-            icon: Theme.dark ? @image-url("icons/sun.svg") : @image-url("icons/moon.svg");
+            icon: Theme.dark ? Icons.sun : Icons.moon;
             label: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
             size: 48px;
             clicked => { Theme.dark = !Theme.dark; }
@@ -130,7 +163,7 @@ export component TopBar inherits HorizontalLayout {
             VerticalLayout {
                 alignment: center;
                 Text { text: root.user-name; font-size: 14px; font-weight: 500; color: Theme.text; }
-                Text { text: "Up " + root.uptime; font-size: 11.5px; color: Theme.text-2; font-family: Theme.mono; }
+                Text { text: "Up " + root.summary.uptime; font-size: 11.5px; color: Theme.text-2; font-family: Theme.mono; }
             }
             VerticalLayout {
                 alignment: center;

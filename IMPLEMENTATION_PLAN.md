@@ -146,7 +146,10 @@ Result: 31 MB RSS, ~0% idle CPU, 15.8 MB binary (0.8 MB over budget; the embedde
 - Slint window with the theme tokens, Mona Sans loaded, left rail, top bar and empty cards in light and dark.
 - **Done when:** `cargo run --release` shows the styled shell with an RSS under 30 MB.
 
-### M1: Core sampler + Performance page (3–4 days)
+### M1: Core sampler + Performance page (3–4 days) ✅ done
+Result: numbers match `free -b`, `top` (TaskMonitor counts I/O wait as idle, like Windows), `/proc/loadavg`. Sampling costs 0.54 ms per tick. Rendering costs ~7 ms per update frame (headless benchmark: `TASKMONITOR_BENCH=1`), about 1.1–2.2% of one core at 1 s refresh on this laptop: over the 1% target.
+Lessons: (1) never `animate` values that change every tick (each animation re-renders every frame for its duration; removing two halved CPU); (2) the software renderer re-rasterizes SVG images on every draw, so icons are a subset Lucide font (`tools/build_icons.py`); (3) staggering updates across frames is slower (fixed per-frame cost). Follow-up: profile the per-frame cost with `--features profiling` and get under 1%.
+
 - CPU total and per-core, frequency, load average, uptime, process and thread counts.
 - Memory from `meminfo`, including swap and the composition bar.
 - Disks and NICs with rates, active time and response time.

@@ -1,4 +1,22 @@
 import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+
+// A Lucide glyph. Icons are a font because the software renderer caches glyphs
+// but re-rasterizes SVG images on every draw.
+export component Icon inherits Text {
+    in property <string> glyph;
+    in property <length> size: 20px;
+    in property <color> tint: Theme.text;
+    text: glyph;
+    font-family: Icons.font;
+    font-size: size;
+    color: tint;
+    width: size;
+    height: size;
+    horizontal-alignment: center;
+    vertical-alignment: center;
+    accessible-role: none;
+}
 
 // White rounded panel; put a layout inside it.
 export component Card inherits Rectangle {
@@ -10,7 +28,7 @@ export component Card inherits Rectangle {
 }
 
 export component IconButton inherits Rectangle {
-    in property <image> icon;
+    in property <string> icon;
     in property <string> label;
     in property <length> size: 44px;
     in property <length> icon-size: 20px;
@@ -36,11 +54,10 @@ export component IconButton inherits Rectangle {
     accessible-label: label;
     accessible-action-default => { root.clicked(); }
 
-    Image {
-        source: root.icon;
-        width: root.icon-size;
-        height: root.icon-size;
-        colorize: root.danger ? #ffffff : Theme.text;
+    Icon {
+        glyph: root.icon;
+        size: root.icon-size;
+        tint: root.danger ? #ffffff : Theme.text;
     }
 
     ta := TouchArea {
@@ -85,13 +102,17 @@ export component Badge inherits Rectangle {
 // Small rounded label, optionally with an icon.
 export component Chip inherits Rectangle {
     in property <string> text;
-    in property <image> icon;
-    in property <bool> has-icon;
+    in property <string> icon;
     in property <bool> mono;
+    // Set `clickable` to use the chip as a toggle/segment.
+    in property <bool> clickable;
+    in property <bool> selected;
+    callback clicked;
 
     height: 30px;
     border-radius: self.height / 2;
-    background: Theme.tile;
+    background: selected ? Theme.text : clickable && ta.has-hover ? Theme.hover : Theme.tile;
+    animate background { duration: 120ms; }
 
     HorizontalLayout {
         padding-left: 12px;
@@ -99,19 +120,80 @@ export component Chip inherits Rectangle {
         spacing: 6px;
         alignment: center;
 
-        if root.has-icon: Image {
-            source: root.icon;
-            width: 14px;
-            colorize: Theme.text-2;
-            vertical-alignment: center;
+        if root.icon != "": VerticalLayout {
+            alignment: center;
+            Icon { glyph: root.icon; size: 14px; tint: Theme.text-2; }
         }
         Text {
             text: root.text;
-            color: Theme.text;
+            color: root.selected ? Theme.card : Theme.text;
             font-size: 12.5px;
             font-family: root.mono ? Theme.mono : "Mona Sans";
             vertical-alignment: center;
         }
+    }
+
+    ta := TouchArea {
+        enabled: root.clickable;
+        mouse-cursor: root.clickable ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Area/line graph. Paths come from Rust in a 0..100 × 0..100 box, newest sample on the right.
+export component Graph inherits Rectangle {
+    in property <string> line-a;
+    in property <string> fill-a;
+    in property <string> line-b;
+    in property <color> color-a: Theme.accent-strong;
+    in property <color> color-b: Theme.text;
+    in property <string> scale;
+
+    border-radius: Theme.radius-tile;
+    background: Theme.tile;
+    clip: true;
+
+    for i in 3: Rectangle {
+        y: parent.height * (i + 1) / 4;
+        height: 1px;
+        background: Theme.line;
+    }
+    if root.fill-a != "": Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        commands: root.fill-a;
+        fill: root.color-a.with-alpha(0.22);
+    }
+    if root.line-a != "": Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        commands: root.line-a;
+        stroke: root.color-a;
+        stroke-width: 2px;
+    }
+    if root.line-b != "": Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 100;
+        viewbox-height: 100;
+        fit: fill;
+        commands: root.line-b;
+        stroke: root.color-b;
+        stroke-width: 1.5px;
+    }
+    if root.scale != "": Text {
+        x: parent.width - self.width - 10px;
+        y: 8px;
+        text: root.scale;
+        font-size: 11px;
+        font-family: Theme.mono;
+        color: Theme.text-2;
     }
 }
 
@@ -160,7 +242,7 @@ export component CardHeader inherits HorizontalLayout {
     }
     Rectangle { horizontal-stretch: 1; }
     IconButton {
-        icon: @image-url("icons/more.svg");
+        icon: Icons.more;
         label: "More";
         size: 32px;
         icon-size: 16px;
@@ -201,5 +283,26 @@ export component AngledTab inherits Rectangle {
     TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
+    }
+}
+
+// App mark: yellow pulse on a dark rounded square (same art as icons/logo.svg,
+// which stays as the window icon).
+export component Logo inherits Rectangle {
+    in property <length> size: 52px;
+    width: size;
+    height: size;
+    border-radius: size * 14 / 48;
+    background: #111111;
+    Path {
+        width: 100%;
+        height: 100%;
+        viewbox-width: 48;
+        viewbox-height: 48;
+        commands: "M 9 25 L 16 25 L 20 15 L 28 33 L 32 25 L 39 25";
+        stroke: Theme.accent;
+        stroke-width: root.size * 3.5 / 48;
+        stroke-line-cap: round;
+        stroke-line-join: round;
     }
 }

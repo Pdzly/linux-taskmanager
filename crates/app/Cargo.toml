@@ -15,6 +15,12 @@ slint = { version = "1.18", default-features = false, features = [
     "renderer-software",
     "accessibility",
 ] }
+pprof = { version = "0.15.0", optional = true }
+
+[features]
+# In-process CPU profiler for the headless benchmark (`TASKMONITOR_BENCH=1`).
+profiling = ["dep:pprof"]
 
 [build-dependencies]
 slint-build = "1.18"
+
