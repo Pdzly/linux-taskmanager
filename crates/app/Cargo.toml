@@ -1,5 +1,6 @@
 [package]
 name = "taskmonitor"
+description = "A modern task manager for Linux"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -19,10 +20,46 @@ pprof = { version = "0.15.0", optional = true }
 nix = { version = "0.31.3", default-features = false }
 zbus = "5.19"
 
+# `packaging/build-deb.sh` builds everything and runs cargo-deb.
+[package.metadata.deb]
+name = "taskmonitor"
+maintainer = "anuz <anuzsystem@gmail.com>"
+copyright = "2026 anuz"
+section = "admin"
+priority = "optional"
+extended-description = """\
+A modern task manager for Linux: apps and processes with CPU, memory, disk and GPU \
+use, live performance graphs, services, startup apps, users and app history."""
+# pkexec runs the helper for actions on processes you don't own.
+depends = "$auto, pkexec | policykit-1"
+assets = [
+    ["target/release/taskmonitor", "usr/bin/", "755"],
+    # Root helper for actions on other users' processes; pkexec finds it here.
+    ["target/release/taskmonitor-helper", "usr/libexec/", "755"],
+    ["../../packaging/io.github.taskmonitor.policy", "usr/share/polkit-1/actions/", "644"],
+    ["../../packaging/io.github.taskmonitor.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/io.github.taskmonitor.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../packaging/icons/hicolor/scalable/apps/io.github.taskmonitor.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../packaging/icons/hicolor/16x16/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+    ["../../packaging/icons/hicolor/22x22/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/22x22/apps/", "644"],
+    ["../../packaging/icons/hicolor/24x24/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/24x24/apps/", "644"],
+    ["../../packaging/icons/hicolor/32x32/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+    ["../../packaging/icons/hicolor/48x48/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+    ["../../packaging/icons/hicolor/64x64/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+    ["../../packaging/icons/hicolor/128x128/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+    ["../../packaging/icons/hicolor/256x256/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+    ["../../packaging/icons/hicolor/512x512/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+    ["fonts/OFL.txt", "usr/share/doc/taskmonitor/fonts/Mona-Sans-OFL.txt", "644"],
+    ["fonts/LUCIDE-LICENSE", "usr/share/doc/taskmonitor/fonts/Lucide-LICENSE", "644"],
+]
+
 [features]
 # In-process CPU profiler for the headless benchmark (`TASKMONITOR_BENCH=1`).
 profiling = ["dep:pprof"]
 
 [build-dependencies]
 slint-build = "1.18"
+
+[dev-dependencies]
+resvg = "0.48.1"
 

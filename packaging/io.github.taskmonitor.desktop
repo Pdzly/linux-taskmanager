@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=TaskMonitor
+GenericName=Task Manager
+Comment=See and manage running apps, processes, performance, services and startup apps
+Exec=taskmonitor
+Icon=io.github.taskmonitor
+Terminal=false
+Categories=System;Monitor;
+Keywords=task;manager;process;kill;cpu;memory;gpu;disk;network;performance;services;startup;
+StartupWMClass=io.github.taskmonitor
+StartupNotify=true

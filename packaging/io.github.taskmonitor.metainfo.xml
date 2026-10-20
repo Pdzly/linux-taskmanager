@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.taskmonitor</id>
+  <name>TaskMonitor</name>
+  <summary>A modern task manager for Linux</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <developer id="io.github.taskmonitor">
+    <name>anuz</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <description>
+    <p>
+      TaskMonitor shows everything Windows Task Manager does, for Linux: apps and
+      background processes with CPU, memory, disk and GPU use; live performance graphs
+      for every CPU core, memory, disk, network adapter and GPU; services, startup apps,
+      signed-in users and per-app history.
+    </p>
+    <p>
+      End, suspend or reprioritise processes, set CPU affinity or put a process in
+      efficiency mode, start and stop services, and choose which apps start at sign-in.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.taskmonitor.desktop</launchable>
+  <provides>
+    <binary>taskmonitor</binary>
+  </provides>
+  <categories>
+    <category>System</category>
+    <category>Monitor</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-10-20"/>
+  </releases>
+</component>

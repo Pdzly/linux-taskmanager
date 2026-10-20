@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 469.997 469.997">
+  <defs>
+    <style>
+      .cls-1{fill:url(#linear-gradient-1)}
+      .cls-2{fill:#fff2e1}
+    </style>
+    <filter id="filter-1" filterUnits="userSpaceOnUse" x="-2" y="-2" width="473.997" height="473.997" data-vc-blend="screen" color-interpolation-filters="sRGB"><feComponentTransfer in="SourceAlpha"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer><feGaussianBlur stdDeviation="2.5" result="glow"/><feFlood flood-color="#ffffff" flood-opacity="1"/><feComposite in2="glow" operator="in"/><feComposite in2="SourceAlpha" operator="in" result="paint"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="paint"/></feMerge></filter>
+    <linearGradient id="linear-gradient-1" x1="265.339" y1="719.773" x2="276.519" y2="-316.539" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffcc6c"/>
+      <stop offset="1" stop-color="#ff5959"/>
+    </linearGradient>
+    <filter id="filter-2" filterUnits="userSpaceOnUse" x="48.673" y="116.438" width="372.652" height="237.121" data-vc-blend="screen" color-interpolation-filters="sRGB"><feComponentTransfer in="SourceAlpha"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer><feGaussianBlur stdDeviation="2.5" result="glow"/><feFlood flood-color="#ffffff" flood-opacity="1"/><feComposite in2="glow" operator="in"/><feComposite in2="SourceAlpha" operator="in" result="paint"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="paint"/></feMerge></filter>
+  </defs>
+  <title>Untitled-1</title>
+  <g id="Asset_1" data-name="Asset 1">
+    <g>
+      <g filter="url(#filter-1)">
+        <path d="M123.801 0 L346.196 0 C414.57 0 469.997 55.428 469.997 123.801 L469.997 346.196 C469.997 414.57 414.57 469.997 346.196 469.997 L123.801 469.997 C55.428 469.997 0 414.57 0 346.196 L0 123.801 C0 55.428 55.428 0 123.801 0 Z" class="cls-1"/>
+      </g>
+      <g filter="url(#filter-2)">
+        <path d="M225.834 129.476 C229.746 121.502 238.316 117.275 246.833 118.718 C255.351 120.16 262.051 126.973 263.12 135.79 L280.183 276.535 L296.971 236.444 C300.041 229.111 307.214 224.339 315.163 224.339 L419.325 224.339 L419.325 258.339 L324.663 258.339 L290.698 339.452 C287.178 347.857 278.561 352.587 269.793 351.37 C261.025 350.152 254.023 343.254 252.926 334.208 L235.159 187.657 L204.043 251.074 C200.729 257.829 193.861 262.109 186.337 262.109 L50.673 262.109 L50.673 228.109 L177.439 228.109 Z" class="cls-2"/>
+      </g>
+    </g>
+  </g>
+</svg>
