@@ -177,6 +177,10 @@ mod tests {
             "google-chrome"
         );
         assert_eq!(candidate_ids(&format!("{base}snap.firefox.firefox-1a2b.scope"))[0], "firefox_firefox");
+        // KDE Plasma: random hex suffixes on scopes, UUID instances on services.
+        assert_eq!(candidate_ids(&format!("{base}app-org.kde.dolphin-3f2b9c1d0e8a4b5c9d7e6f5a4b3c2d1e.scope"))[0], "org.kde.dolphin");
+        assert_eq!(candidate_ids(&format!("{base}app-org.kde.konsole@0a1b2c3d4e5f.service"))[0], "org.kde.konsole");
+        assert_eq!(candidate_ids(&format!("{base}app-firefox@autostart.service"))[0], "firefox");
         assert!(candidate_ids(&format!("{base}vte-spawn-1234.scope")).is_empty());
         assert!(candidate_ids("/system.slice/cron.service").is_empty());
     }
