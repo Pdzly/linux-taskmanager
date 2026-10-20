@@ -4339,6 +4339,7 @@ dependencies = [
 name = "taskmonitor"
 version = "0.1.0"
 dependencies = [
+ "nix 0.31.3",
  "pprof",
  "slint",
  "slint-build",
@@ -4349,7 +4350,15 @@ dependencies = [
 name = "taskmonitor-core"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "nix 0.31.3",
+]
+
+[[package]]
+name = "taskmonitor-helper"
+version = "0.1.0"
+dependencies = [
+ "taskmonitor-core",
 ]
 
 [[package]]

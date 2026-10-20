@@ -3,6 +3,7 @@
 //! Parsers take `&str` so they can be tested against captured `/proc` text;
 //! [`Sampler`] does the file reading and turns counters into rates.
 
+pub mod actions;
 pub mod apps;
 pub mod cpu;
 pub mod disk;

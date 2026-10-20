@@ -39,6 +39,8 @@ pub struct Process {
     pub write_bps: f64,
     pub threads: u32,
     pub nice: i32,
+    /// Running under SCHED_IDLE (TaskMonitor's "Efficiency mode").
+    pub efficiency: bool,
     pub group: Group,
 }
 
@@ -52,6 +54,7 @@ pub struct Stat {
     pub nice: i32,
     pub threads: u32,
     pub start_time: u64,
+    pub efficiency: bool,
 }
 
 /// Parses `/proc/[pid]/stat`, returning (comm, fields).
@@ -72,6 +75,7 @@ pub fn parse_stat(text: &str) -> Option<(&str, Stat)> {
             nice: f.get(16).and_then(|v| v.parse().ok()).unwrap_or(0),
             threads: num(17) as u32,
             start_time: num(19),
+            efficiency: num(38) == crate::actions::SCHED_IDLE as u64,
         },
     ))
 }
@@ -232,6 +236,7 @@ impl ProcessSampler {
             write_bps,
             threads: stat.threads,
             nice: stat.nice,
+            efficiency: stat.efficiency,
             group: e.group.clone(),
         })
     }
@@ -296,7 +301,7 @@ mod tests {
         let text = "1234 (Web Content (x)) S 1000 1234 1000 0 -1 4194560 100 0 0 0 250 50 0 0 20 5 31 0 98765 1000000 2000 18446744073709551615";
         let (comm, s) = parse_stat(text).unwrap();
         assert_eq!(comm, "Web Content (x)");
-        assert_eq!(s, Stat { state: 'S', ppid: 1000, ticks: 300, nice: 5, threads: 31, start_time: 98765 });
+        assert_eq!(s, Stat { state: 'S', ppid: 1000, ticks: 300, nice: 5, threads: 31, start_time: 98765, efficiency: false });
     }
 
     #[test]

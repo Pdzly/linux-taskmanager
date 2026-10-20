@@ -15,6 +15,7 @@ import { PerformancePage } from "pages/performance.slint";
 import { PlaceholderPage } from "pages/placeholder.slint";
 import { ProcessesPage } from "pages/processes.slint";
 import { DetailsPage } from "pages/details.slint";
+import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast } from "dialogs.slint";
 
 export component MainWindow inherits Window {
     title: "TaskMonitor";
@@ -51,6 +52,33 @@ export component MainWindow inherits Window {
     callback toggle(string);
     callback filter-changed(string);
 
+    // Process actions
+    in-out property <string> toast;
+    in property <string> props-title;
+    in property <[Metric]> props;
+    in-out property <bool> props-open;
+    in property <string> affinity-title;
+    in property <[bool]> affinity-cpus;
+    in-out property <bool> affinity-open;
+    property <string> affinity-key;
+    property <string> confirm-action;
+    property <string> confirm-key;
+    callback action(string, string);
+    callback properties(string);
+    callback affinity-query(string);
+    callback affinity-all();
+    callback affinity-apply(string);
+
+    // Kill and End process tree can lose work, so they ask first.
+    function request(action: string, key: string) {
+        if action == "kill" || action == "tree" {
+            root.confirm-action = action;
+            root.confirm-key = key;
+        } else {
+            root.action(action, key);
+        }
+    }
+
     VerticalLayout {
         padding: 20px;
         spacing: 20px;
@@ -77,6 +105,13 @@ export component MainWindow inherits Window {
                     root.page = p;
                     root.page-changed(p);
                 }
+                end-task => {
+                    if root.selected-key != "" && (root.page == Page.processes || root.page == Page.details) {
+                        root.request("end", root.selected-key);
+                    } else {
+                        root.toast = "Select a process on the Processes or Details page first";
+                    }
+                }
             }
 
             if root.page == Page.performance: PerformancePage {
@@ -101,6 +136,12 @@ export component MainWindow inherits Window {
                 sort(c) => { root.sort(c); }
                 toggle(k) => { root.toggle(k); }
                 filter-edited(t) => { root.filter-changed(t); }
+                request(a, k) => { root.request(a, k); }
+                properties(k) => { root.properties(k); }
+                affinity(k) => {
+                    root.affinity-key = k;
+                    root.affinity-query(k);
+                }
             }
             if root.page == Page.history: PlaceholderPage { title: "App history"; note: "Per-app resource history arrives in M6."; }
             if root.page == Page.startup: PlaceholderPage { title: "Startup apps"; note: "Autostart entries arrive in M5."; }
@@ -114,9 +155,62 @@ export component MainWindow inherits Window {
                 selected-key <=> root.selected-key;
                 sort(c) => { root.sort(c); }
                 filter-edited(t) => { root.filter-changed(t); }
+                request(a, k) => { root.request(a, k); }
+                properties(k) => { root.properties(k); }
+                affinity(k) => {
+                    root.affinity-key = k;
+                    root.affinity-query(k);
+                }
             }
             if root.page == Page.services: PlaceholderPage { title: "Services"; note: "systemd units arrive in M5."; }
             if root.page == Page.settings: PlaceholderPage { title: "Settings"; note: "Theme, refresh rate and defaults arrive in M6."; }
         }
+    }
+
+    if root.confirm-action != "": ConfirmDialog {
+        width: root.width;
+        height: root.height;
+        title: root.confirm-action == "kill" ? "Kill this process?" : "End the whole process tree?";
+        message: root.confirm-action == "kill"
+            ? "It stops immediately, without a chance to save. Unsaved work in it will be lost."
+            : "This ends the process and every process it started. Unsaved work in any of them will be lost.";
+        confirm-text: root.confirm-action == "kill" ? "Kill" : "End process tree";
+        dismiss => { root.confirm-action = ""; }
+        confirmed => {
+            root.action(root.confirm-action, root.confirm-key);
+            root.confirm-action = "";
+        }
+    }
+
+    if root.props-open: PropertiesSheet {
+        width: root.width;
+        height: root.height;
+        title: root.props-title;
+        facts: root.props;
+        dismiss => { root.props-open = false; }
+    }
+
+    if root.affinity-open: AffinityDialog {
+        width: root.width;
+        height: root.height;
+        title: root.affinity-title;
+        cpus: root.affinity-cpus;
+        dismiss => { root.affinity-open = false; }
+        select-all => { root.affinity-all(); }
+        apply => {
+            root.affinity-apply(root.affinity-key);
+            root.affinity-open = false;
+        }
+    }
+
+    if root.toast != "": Toast {
+        x: (root.width - self.width) / 2;
+        y: root.height - self.height - 28px;
+        text: root.toast;
+    }
+    Timer {
+        interval: 4s;
+        running: root.toast != "";
+        triggered => { root.toast = ""; }
     }
 }

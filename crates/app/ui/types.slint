@@ -69,6 +69,8 @@ export struct ProcRow {
     mem-heat: float,
     disk: string,
     disk-heat: float,
+    suspended: bool,
+    efficiency: bool,
 }
 
 // Column header figures (machine totals) for the Processes table.
@@ -90,4 +92,6 @@ export struct DetailRow {
     threads: string,
     nice: string,
     cmd: string,
+    suspended: bool,
+    efficiency: bool,
 }

@@ -121,7 +121,9 @@ impl View {
                     count: if single { SharedString::new() } else { format!("({})", item.members.len()).into() },
                     expandable: !single,
                     expanded,
-                    status: status_short(item.members.iter().map(|p| p.state)).into(),
+                    status: status_short(item.members.iter().map(|p| (p.state, p.efficiency))).into(),
+                    suspended: item.members.iter().all(|p| p.state == 'T'),
+                    efficiency: item.members.iter().all(|p| p.efficiency),
                     ..item_row(&item.name, item.cpu, item.mem, item.disk, ctx)
                 });
                 if expanded && !single {
@@ -132,7 +134,9 @@ impl View {
                             kind: 2,
                             key: format!("pid:{}", p.pid).into(),
                             count: format!("{}", p.pid).into(),
-                            status: status_short([p.state]).into(),
+                            status: status_short([(p.state, p.efficiency)]).into(),
+                            suspended: p.state == 'T',
+                            efficiency: p.efficiency,
                             ..item_row(&p.name, p.cpu, p.memory, p.read_bps + p.write_bps, ctx)
                         });
                     }
@@ -224,6 +228,8 @@ fn detail_row(p: &Process) -> DetailRow {
         threads: p.threads.to_string().into(),
         nice: p.nice.to_string().into(),
         cmd: p.cmdline.as_ref().into(),
+        suspended: p.state == 'T',
+        efficiency: p.efficiency,
     }
 }
 
@@ -250,10 +256,11 @@ fn cmp_names(a: &str, b: &str) -> Ordering {
 /// Only states worth calling out, as Windows leaves Status blank for normal processes.
 /// A group shows a status only when every member has it (one unreaped child
 /// shouldn't label a whole browser "Zombie").
-fn status_short(states: impl IntoIterator<Item = char>) -> &'static str {
-    let label = |s: char| match s {
+fn status_short(states: impl IntoIterator<Item = (char, bool)>) -> &'static str {
+    let label = |(s, efficiency): (char, bool)| match s {
         'T' | 't' => "Suspended",
         'Z' => "Zombie",
+        _ if efficiency => "Efficiency mode",
         'D' => "Waiting on I/O",
         _ => "",
     };
@@ -311,10 +318,12 @@ mod tests {
     fn initials_and_status() {
         assert_eq!(initials("gnome-text-editor"), "GT");
         assert_eq!(initials("firefox"), "Fi");
-        assert_eq!(status_short(['T', 'T']), "Suspended");
-        assert_eq!(status_short(['S', 'Z']), "");
-        assert_eq!(status_short(['Z']), "Zombie");
-        assert_eq!(status_short(['S', 'R']), "");
+        let s = |c| (c, false);
+        assert_eq!(status_short([s('T'), s('T')]), "Suspended");
+        assert_eq!(status_short([s('S'), s('Z')]), "");
+        assert_eq!(status_short([s('Z')]), "Zombie");
+        assert_eq!(status_short([s('S'), s('R')]), "");
+        assert_eq!(status_short([('S', true), ('R', true)]), "Efficiency mode");
     }
 
     fn proc(pid: u32, name: &str, cpu: f32, group: Group) -> Process {
@@ -331,6 +340,7 @@ mod tests {
             write_bps: 0.0,
             threads: 1,
             nice: 0,
+            efficiency: false,
             group,
         }
     }

@@ -165,7 +165,9 @@ Result: apps detected from systemd scopes (`app-gnome-*`, `app-flatpak-*`, `snap
 - Virtualized sortable table, search, column chooser, and in-place model diffing.
 - **Done when:** 500+ processes scroll at 60 fps and TaskMonitor itself stays under 1% CPU.
 
-### M3: Process actions (2 days)
+### M3: Process actions (2 days) ✅ done (elevated path not yet tried with a real password prompt)
+Result: right-click menu on Processes and Details rows (End task, End process tree, Kill, Suspend/Resume, Efficiency mode, Set priority, Set affinity…, Open file location, Properties), End task button and rail button, confirmation for Kill and End process tree, Run new task, toasts. Actions run directly; EPERM/EACCES (raising priority returns EACCES) are retried in one batch via `pkexec taskmonitor-helper`, which refuses PID 0/1 and takes numeric arguments only. Binary grew to 17.9 MB: size work moves to M7.
+
 - End task, Kill, End tree, Suspend/Resume, priority, affinity dialog, Efficiency mode, open file location, properties sheet.
 - Helper binary, polkit policy and `pkexec` path for `EPERM`; confirmation dialogs for destructive actions.
 - **Done when:** you can kill your own process directly and a root process after a polkit prompt.

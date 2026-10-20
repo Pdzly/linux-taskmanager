@@ -1,0 +1,155 @@
+import { Theme } from "theme.slint";
+import { Card, Chip } from "components.slint";
+import { Metric } from "types.slint";
+
+// Pill button for dialogs and page headers.
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> danger;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 40px;
+    min-width: label.preferred-width + 36px;
+    border-radius: self.height / 2;
+    opacity: enabled ? 1 : 0.4;
+    background: danger ? (ta.has-hover ? Theme.danger.darker(0.12) : Theme.danger)
+        : primary ? (ta.has-hover ? Theme.text.transparentize(0.15) : Theme.text)
+        : ta.has-hover ? Theme.hover : Theme.tile;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+
+    label := Text {
+        text: root.text;
+        font-size: 13.5px;
+        font-weight: 500;
+        color: root.danger ? #ffffff : root.primary ? Theme.card : Theme.text;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Dims the window and centres a card; clicking outside cancels.
+component Modal inherits Rectangle {
+    in property <length> card-width: 440px;
+    callback dismiss();
+
+    background: #00000059;
+    TouchArea {
+        clicked => { root.dismiss(); }
+    }
+    Card {
+        width: root.card-width;
+        height: content.preferred-height;
+        drop-shadow-blur: 40px;
+        drop-shadow-color: #00000040;
+        // Swallow clicks so they don't reach the backdrop.
+        TouchArea { }
+        content := VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+            @children
+        }
+    }
+}
+
+export component ConfirmDialog inherits Modal {
+    in property <string> title;
+    in property <string> message;
+    in property <string> confirm-text: "Confirm";
+    callback confirmed();
+
+    Text { text: root.title; font-size: 18px; font-weight: 500; color: Theme.text; wrap: word-wrap; }
+    Text { text: root.message; font-size: 13.5px; color: Theme.text-2; wrap: word-wrap; }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        Button { text: "Cancel"; clicked => { root.dismiss(); } }
+        Button { text: root.confirm-text; danger: true; clicked => { root.confirmed(); } }
+    }
+}
+
+export component PropertiesSheet inherits Modal {
+    in property <string> title;
+    in property <[Metric]> facts;
+    card-width: 620px;
+
+    Text { text: root.title; font-size: 18px; font-weight: 500; color: Theme.text; }
+    for fact in root.facts: HorizontalLayout {
+        spacing: 16px;
+        Text { width: 150px; text: fact.label; font-size: 12.5px; color: Theme.text-2; }
+        Text {
+            horizontal-stretch: 1;
+            text: fact.value;
+            font-size: 12.5px;
+            font-family: Theme.mono;
+            color: Theme.text;
+            wrap: char-wrap;
+        }
+    }
+    HorizontalLayout {
+        alignment: end;
+        Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+    }
+}
+
+// Choose which logical CPUs a process may run on.
+export component AffinityDialog inherits Modal {
+    in property <string> title;
+    // Owned by Rust; the chips flip entries in place.
+    in-out property <[bool]> cpus;
+    callback select-all();
+    callback apply();
+    card-width: 520px;
+
+    property <int> per-row: 10;
+    property <int> rows: Math.ceil(root.cpus.length / root.per-row);
+
+    Text { text: "Processor affinity"; font-size: 18px; font-weight: 500; color: Theme.text; }
+    Text { text: "Which logical CPUs is " + root.title + " allowed to run on? Highlighted ones are allowed."; font-size: 13.5px; color: Theme.text-2; wrap: word-wrap; }
+    for r in root.rows: HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        for c in root.per-row: Chip {
+            property <int> index: r * root.per-row + c;
+            visible: self.index < root.cpus.length;
+            width: 40px;
+            text: self.index;
+            mono: true;
+            clickable: true;
+            selected: root.cpus[self.index];
+            clicked => { root.cpus[self.index] = !root.cpus[self.index]; }
+        }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        Button { text: "All"; clicked => { root.select-all(); } }
+        Rectangle { horizontal-stretch: 1; }
+        Button { text: "Cancel"; clicked => { root.dismiss(); } }
+        Button {
+            text: "Apply";
+            primary: true;
+            clicked => { root.apply(); }
+        }
+    }
+}
+
+export component Toast inherits Rectangle {
+    in property <string> text;
+    height: 44px;
+    width: label.preferred-width + 40px;
+    border-radius: self.height / 2;
+    background: Theme.text;
+    drop-shadow-blur: 20px;
+    drop-shadow-color: #00000033;
+    label := Text {
+        text: root.text;
+        font-size: 13.5px;
+        color: Theme.card;
+    }
+}

@@ -2,7 +2,8 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Card, Icon, Badge } from "../components.slint";
 import { Icons } from "../icons.slint";
-import { SearchField, HeaderCell, HeatCell, Cell } from "../table.slint";
+import { SearchField, HeaderCell, HeatCell, Cell, ProcessMenu } from "../table.slint";
+import { Button } from "../dialogs.slint";
 import { ProcRow, ProcTotals } from "../types.slint";
 
 // Shared column widths for header and rows.
@@ -16,6 +17,9 @@ component Row inherits Rectangle {
     in property <bool> selected;
     callback select();
     callback toggle();
+    callback request(string);
+    callback properties();
+    callback affinity();
 
     height: item.kind == 0 ? 44px : 42px;
     border-radius: 12px;
@@ -98,6 +102,18 @@ component Row inherits Rectangle {
         HeatCell { width: Cols.num; text: root.item.mem; heat: root.item.mem-heat; }
         HeatCell { width: Cols.num; text: root.item.disk; heat: root.item.disk-heat; }
     }
+
+    // On top of the row: takes right-clicks, lets left-clicks through to the row.
+    ProcessMenu {
+        width: 100%;
+        height: 100%;
+        enabled: root.item.kind != 0;
+        suspended: root.item.suspended;
+        efficiency: root.item.efficiency;
+        request(a) => { root.request(a); }
+        properties => { root.properties(); }
+        affinity => { root.affinity(); }
+    }
 }
 
 export component ProcessesPage inherits Card {
@@ -110,6 +126,9 @@ export component ProcessesPage inherits Card {
     callback sort(string);
     callback toggle(string);
     callback filter-edited(string);
+    callback request(string, string);
+    callback properties(string);
+    callback affinity(string);
 
     VerticalLayout {
         padding: 20px;
@@ -125,6 +144,15 @@ export component ProcessesPage inherits Card {
                 Text { text: root.totals.count; font-size: 12px; color: Theme.text-2; }
             }
             Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "End task";
+                    primary: true;
+                    enabled: root.selected-key != "";
+                    clicked => { root.request("end", root.selected-key); }
+                }
+            }
             VerticalLayout {
                 alignment: center;
                 SearchField {
@@ -195,6 +223,12 @@ export component ProcessesPage inherits Card {
                 selected: row.key == root.selected-key;
                 select => { root.selected-key = row.key; }
                 toggle => { root.toggle(row.key); }
+                request(a) => {
+                    root.selected-key = row.key;
+                    root.request(a, row.key);
+                }
+                properties => { root.properties(row.key); }
+                affinity => { root.affinity(row.key); }
             }
         }
     }

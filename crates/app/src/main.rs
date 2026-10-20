@@ -1,3 +1,4 @@
+mod actions;
 mod bench;
 mod bridge;
 mod format;
@@ -6,7 +7,7 @@ mod processes;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use slint::SharedString;
+use slint::{Model, ModelRc, SharedString, VecModel};
 use taskmonitor_core::{Process, ProcessSampler, Sampler, Snapshot};
 
 slint::include_modules!();
@@ -46,7 +47,55 @@ fn main() -> Result<(), slint::PlatformError> {
         let send = send.clone();
         move |k| send(Cmd::Toggle(k))
     });
-    ui.on_filter_changed(move |f| send(Cmd::Filter(f)));
+    ui.on_filter_changed({
+        let send = send.clone();
+        move |f| send(Cmd::Filter(f))
+    });
+    ui.on_action({
+        let send = send.clone();
+        move |a, k| send(Cmd::Action(a, k))
+    });
+    ui.on_properties({
+        let send = send.clone();
+        move |k| send(Cmd::Properties(k))
+    });
+    ui.on_affinity_query({
+        let send = send.clone();
+        move |k| send(Cmd::AffinityQuery(k))
+    });
+    ui.on_affinity_all({
+        let ui = ui.as_weak();
+        move || {
+            let ui = ui.unwrap();
+            let all = vec![true; ui.get_affinity_cpus().row_count()];
+            ui.set_affinity_cpus(ModelRc::new(VecModel::from(all)));
+        }
+    });
+    ui.on_affinity_apply({
+        let ui = ui.as_weak();
+        move |k| {
+            let mask: String = ui.unwrap().get_affinity_cpus().iter().map(|on| if on { '1' } else { '0' }).collect();
+            if mask.contains('1') {
+                send(Cmd::Action(format!("affinity:{mask}").into(), k));
+            } else {
+                ui.unwrap().set_toast("Pick at least one processor".into());
+            }
+        }
+    });
+    ui.on_run_command({
+        let ui = ui.as_weak();
+        move |cmd| {
+            let cmd = cmd.trim();
+            if cmd.is_empty() {
+                return;
+            }
+            let msg = match taskmonitor_core::actions::run(cmd) {
+                Ok(pid) => format!("Started {cmd} (PID {pid})"),
+                Err(e) => format!("Couldn't start {cmd}: {e}"),
+            };
+            ui.unwrap().set_toast(msg.into());
+        }
+    });
     if let Ok(page) = std::env::var("TASKMONITOR_PAGE") {
         let page = match page.as_str() {
             "processes" => Page::Processes,
@@ -62,6 +111,13 @@ fn main() -> Result<(), slint::PlatformError> {
     if let Ok(path) = std::env::var("TASKMONITOR_SNAPSHOT") {
         if let Ok(theme) = std::env::var("TASKMONITOR_THEME") {
             ui.global::<Theme>().set_dark(theme == "dark");
+        }
+        // TASKMONITOR_OPEN=properties|affinity opens that dialog for TaskMonitor itself.
+        let own = SharedString::from(format!("pid:{}", std::process::id()));
+        match std::env::var("TASKMONITOR_OPEN").as_deref() {
+            Ok("properties") => ui.invoke_properties(own),
+            Ok("affinity") => ui.invoke_affinity_query(own),
+            _ => {}
         }
         let delay = std::env::var("TASKMONITOR_SNAPSHOT_DELAY_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(800);
         let weak = ui.as_weak();
@@ -90,6 +146,10 @@ enum Cmd {
     Sort(SharedString),
     Filter(SharedString),
     Toggle(SharedString),
+    /// (action name, row key), see actions::Action::parse.
+    Action(SharedString, SharedString),
+    Properties(SharedString),
+    AffinityQuery(SharedString),
 }
 
 /// Samples on a background thread and pushes updates into the UI.
@@ -147,6 +207,18 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                             Cmd::Sort(c) => view.set_sort(c),
                             Cmd::Filter(f) => view.filter = f.to_string(),
                             Cmd::Toggle(k) => view.toggle(k),
+                            Cmd::Action(a, k) => {
+                                run_action(&ui, &a, &k, last.1.clone());
+                                continue;
+                            }
+                            Cmd::Properties(k) => {
+                                show_properties(&ui, &k, &last.1);
+                                continue;
+                            }
+                            Cmd::AffinityQuery(k) => {
+                                show_affinity(&ui, &k, &last.1);
+                                continue;
+                            }
                             Cmd::Interval(_) => unreachable!(),
                         }
                         if shows_procs(page) && !push_rows(&view, page, &last) {
@@ -174,4 +246,43 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
         })
         .expect("spawn sampler thread");
     tx
+}
+
+/// Runs an action on its own thread: a polkit password prompt may block for a while.
+fn run_action(ui: &slint::Weak<MainWindow>, action: &str, key: &str, procs: Vec<Process>) {
+    let Some(action) = actions::Action::parse(action) else { return };
+    let (ui, key) = (ui.clone(), key.to_owned());
+    std::thread::spawn(move || {
+        let msg = actions::perform(&action, &key, &procs);
+        let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
+    });
+}
+
+fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
+    let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
+    let title = format!("{} (PID {pid})", actions::name_for_key(&format!("pid:{pid}"), procs));
+    let facts: Vec<Metric> = taskmonitor_core::actions::info(pid)
+        .into_iter()
+        .map(|(label, value)| Metric { label: label.into(), value: value.into(), unit: "".into() })
+        .collect();
+    let _ = ui.upgrade_in_event_loop(move |ui| {
+        ui.set_props_title(title.into());
+        ui.set_props(ModelRc::new(VecModel::from(facts)));
+        ui.set_props_open(true);
+    });
+}
+
+fn show_affinity(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
+    let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
+    let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let title = actions::name_for_key(key, procs);
+    let result = taskmonitor_core::actions::affinity(pid, cpus);
+    let _ = ui.upgrade_in_event_loop(move |ui| match result {
+        Ok(mask) => {
+            ui.set_affinity_title(title.into());
+            ui.set_affinity_cpus(ModelRc::new(VecModel::from(mask)));
+            ui.set_affinity_open(true);
+        }
+        Err(e) => ui.set_toast(format!("Can't read affinity of {title}: {}", e.desc()).into()),
+    });
 }

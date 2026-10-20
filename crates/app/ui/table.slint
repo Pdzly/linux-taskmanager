@@ -123,3 +123,42 @@ export component Cell inherits Text {
     vertical-alignment: center;
     overflow: elide;
 }
+
+// Right-click menu shared by the Processes and Details rows. Emits action names
+// understood by actions.rs ("end", "priority:-5", …).
+export component ProcessMenu inherits ContextMenuArea {
+    in property <bool> suspended;
+    in property <bool> efficiency;
+    callback request(string);
+    callback properties();
+    callback affinity();
+
+    Menu {
+        MenuItem { title: "End task"; activated => { root.request("end"); } }
+        MenuItem { title: "End process tree"; activated => { root.request("tree"); } }
+        MenuItem { title: "Kill"; activated => { root.request("kill"); } }
+        MenuSeparator { }
+        MenuItem {
+            title: root.suspended ? "Resume" : "Suspend";
+            activated => { root.request(root.suspended ? "resume" : "suspend"); }
+        }
+        MenuItem {
+            title: "Efficiency mode";
+            checkable: true;
+            checked: root.efficiency;
+            activated => { root.request(root.efficiency ? "efficiency-off" : "efficiency-on"); }
+        }
+        Menu {
+            title: "Set priority";
+            MenuItem { title: "High"; activated => { root.request("priority:-10"); } }
+            MenuItem { title: "Above normal"; activated => { root.request("priority:-5"); } }
+            MenuItem { title: "Normal"; activated => { root.request("priority:0"); } }
+            MenuItem { title: "Below normal"; activated => { root.request("priority:5"); } }
+            MenuItem { title: "Low"; activated => { root.request("priority:19"); } }
+        }
+        MenuItem { title: "Set affinity…"; activated => { root.affinity(); } }
+        MenuSeparator { }
+        MenuItem { title: "Open file location"; activated => { root.request("open"); } }
+        MenuItem { title: "Properties"; activated => { root.properties(); } }
+    }
+}
