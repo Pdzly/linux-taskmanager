@@ -1,0 +1,85 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Card, Badge } from "../components.slint";
+import { Cell, HeatCell } from "../table.slint";
+import { UserRow } from "../types.slint";
+
+global UCols {
+    out property <length> status: 190px;
+    out property <length> num: 108px;
+}
+
+export component UsersPage inherits Card {
+    in property <[UserRow]> rows;
+    callback act(string, string);
+
+    VerticalLayout {
+        padding: 20px;
+        padding-bottom: 8px;
+        spacing: 12px;
+
+        VerticalLayout {
+            spacing: 2px;
+            Text { text: "Users"; font-size: 22px; font-weight: 500; color: Theme.text; }
+            Text { text: "Signed-in sessions and what each user's processes are using"; font-size: 12px; color: Theme.text-2; }
+        }
+
+        HorizontalLayout {
+            height: 30px;
+            padding-left: 12px;
+            Cell { horizontal-stretch: 1; text: "User"; font-size: 12px; color: Theme.text-2; }
+            Cell { width: UCols.status; text: "Status"; font-size: 12px; color: Theme.text-2; }
+            Cell { width: UCols.num; text: "Processes"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+            // HeatCell values sit 12px in from the right edge; match that.
+            HorizontalLayout {
+                width: UCols.num;
+                padding-right: 12px;
+                Cell { text: "CPU"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+            }
+            HorizontalLayout {
+                width: UCols.num;
+                padding-right: 12px;
+                Cell { text: "Memory"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+            }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+
+        ListView {
+            vertical-stretch: 1;
+            for row in root.rows: Rectangle {
+                height: 64px;
+                border-radius: 12px;
+                background: ta.has-hover ? Theme.tile.with-alpha(0.5) : transparent;
+                ta := TouchArea { }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    spacing: 0px;
+                    HorizontalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 12px;
+                        VerticalLayout {
+                            alignment: center;
+                            Badge { text: row.initials; tone: Theme.badges[row.tone]; size: 38px; online: true; }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 2px;
+                            Text { text: row.user; font-size: 14px; font-weight: 500; color: Theme.text; }
+                            Text { text: row.detail; font-size: 12px; color: Theme.text-2; }
+                        }
+                    }
+                    Cell { width: UCols.status; text: row.status; color: Theme.text-2; }
+                    Cell { width: UCols.num; text: row.processes; font-family: Theme.mono; horizontal-alignment: right; }
+                    HeatCell { width: UCols.num; text: row.cpu; heat: row.cpu-heat; }
+                    HeatCell { width: UCols.num; text: row.mem; heat: row.mem-heat; }
+                }
+                ContextMenuArea {
+                    Menu {
+                        MenuItem { title: "Lock"; activated => { root.act("lock", row.key); } }
+                        MenuItem { title: "Sign out"; activated => { root.act("terminate", row.key); } }
+                    }
+                }
+            }
+        }
+    }
+}

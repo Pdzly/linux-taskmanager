@@ -98,3 +98,39 @@ export struct DetailRow {
     suspended: bool,
     efficiency: bool,
 }
+
+export struct ServiceRow {
+    name: string,
+    description: string,
+    // "Running", "Stopped", "Failed", "Starting", "Stopping", "Exited"
+    status: string,
+    // 0 stopped/exited, 1 running, 2 failed, 3 transitioning
+    tone: int,
+    startup: string,
+    pid: string,
+    can-enable: bool,
+}
+
+export struct StartupRow {
+    id: string,
+    name: string,
+    command: string,
+    initials: string,
+    tone: int,
+    enabled: bool,
+    source: string,
+}
+
+export struct UserRow {
+    key: string,
+    user: string,
+    initials: string,
+    tone: int,
+    detail: string,
+    status: string,
+    processes: string,
+    cpu: string,
+    cpu-heat: float,
+    mem: string,
+    mem-heat: float,
+}

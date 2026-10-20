@@ -13,7 +13,10 @@ pub mod mem;
 pub mod net;
 pub mod process;
 mod sampler;
+pub mod services;
+pub mod startup;
 pub mod system;
+pub mod users;
 
 pub use gpu::{Gpu, GpuSampler, Vendor};
 pub use history::History;

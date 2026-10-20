@@ -1,0 +1,131 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Card, Chip } from "../components.slint";
+import { SearchField, Cell } from "../table.slint";
+import { ServiceRow } from "../types.slint";
+
+global SCols {
+    out property <length> name: 260px;
+    out property <length> status: 120px;
+    out property <length> startup: 120px;
+    out property <length> pid: 80px;
+}
+
+component SRow inherits Rectangle {
+    in property <ServiceRow> item;
+    in property <bool> selected;
+    callback select();
+    callback act(string);
+
+    height: 38px;
+    border-radius: 10px;
+    background: selected ? Theme.tile : ta.has-hover ? Theme.tile.with-alpha(0.5) : transparent;
+
+    ta := TouchArea { clicked => { root.select(); } }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 0px;
+        Cell { width: SCols.name; text: root.item.name; font-weight: 500; }
+        Cell { horizontal-stretch: 1; text: root.item.description; color: Theme.text-2; }
+        HorizontalLayout {
+            width: SCols.status;
+            padding-left: 12px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.item.tone == 1 ? Theme.ok : root.item.tone == 2 ? Theme.bad : root.item.tone == 3 ? Theme.accent-strong : Theme.hover;
+                }
+            }
+            Cell { text: root.item.status; color: root.item.tone == 2 ? Theme.bad : Theme.text; }
+        }
+        Cell { width: SCols.startup; text: root.item.startup; color: Theme.text-2; }
+        Cell { width: SCols.pid; text: root.item.pid; font-family: Theme.mono; horizontal-alignment: right; }
+    }
+
+    ContextMenuArea {
+        Menu {
+            MenuItem { title: "Start"; enabled: root.item.tone != 1; activated => { root.act("start"); } }
+            MenuItem { title: "Stop"; enabled: root.item.tone == 1 || root.item.tone == 3; activated => { root.act("stop"); } }
+            MenuItem { title: "Restart"; activated => { root.act("restart"); } }
+            MenuSeparator { }
+            MenuItem { title: "Start automatically (enable)"; enabled: root.item.can-enable && root.item.startup != "Enabled"; activated => { root.act("enable"); } }
+            MenuItem { title: "Don't start automatically (disable)"; enabled: root.item.can-enable && root.item.startup == "Enabled"; activated => { root.act("disable"); } }
+        }
+    }
+}
+
+export component ServicesPage inherits Card {
+    in property <[ServiceRow]> rows;
+    in property <string> summary;
+    in property <bool> user-bus;
+    in-out property <string> filter;
+    property <string> selected;
+    callback filter-edited(string);
+    callback bus-changed(bool);
+    callback act(string, string);
+
+    VerticalLayout {
+        padding: 20px;
+        padding-bottom: 8px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 16px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text { text: "Services"; font-size: 22px; font-weight: 500; color: Theme.text; }
+                Text { text: root.summary == "" ? "Loading…" : root.summary; font-size: 12px; color: Theme.text-2; }
+            }
+            VerticalLayout {
+                alignment: center;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Chip { text: "System"; clickable: true; selected: !root.user-bus; clicked => { root.bus-changed(false); } }
+                    Chip { text: "Yours"; clickable: true; selected: root.user-bus; clicked => { root.bus-changed(true); } }
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                SearchField {
+                    width: 360px;
+                    placeholder: "Search services";
+                    text <=> root.filter;
+                    edited(t) => { root.filter-edited(t); }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            height: 30px;
+            padding-left: 12px;
+            padding-right: 12px;
+            Cell { width: SCols.name; text: "Name"; font-size: 12px; color: Theme.text-2; }
+            Cell { horizontal-stretch: 1; text: "Description"; font-size: 12px; color: Theme.text-2; }
+            Cell { width: SCols.status; text: "   Status"; font-size: 12px; color: Theme.text-2; }
+            Cell { width: SCols.startup; text: "Startup"; font-size: 12px; color: Theme.text-2; }
+            Cell { width: SCols.pid; text: "PID"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+
+        ListView {
+            vertical-stretch: 1;
+            for row in root.rows: SRow {
+                item: row;
+                selected: row.name == root.selected;
+                select => { root.selected = row.name; }
+                act(verb) => {
+                    root.selected = row.name;
+                    root.act(verb, row.name);
+                }
+            }
+        }
+    }
+}

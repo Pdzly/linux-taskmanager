@@ -3,11 +3,14 @@ mod bench;
 mod bridge;
 mod format;
 mod processes;
+mod system_pages;
 
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use slint::{Model, ModelRc, SharedString, VecModel};
+use taskmonitor_core::services::{Bus, Service, Services};
+use taskmonitor_core::users::{Logind, Session};
 use taskmonitor_core::{GpuSampler, Process, ProcessSampler, Sampler, Snapshot};
 
 slint::include_modules!();
@@ -59,6 +62,22 @@ fn main() -> Result<(), slint::PlatformError> {
         let send = send.clone();
         move |a, k| send(Cmd::Action(a, k))
     });
+    ui.on_service_bus_changed({
+        let send = send.clone();
+        move |user| send(Cmd::ServiceBus(user))
+    });
+    ui.on_service_act({
+        let send = send.clone();
+        move |verb, name| send(Cmd::ServiceAct(verb, name))
+    });
+    ui.on_startup_toggled({
+        let send = send.clone();
+        move |id, on| send(Cmd::StartupToggle(id, on))
+    });
+    ui.on_session_act({
+        let send = send.clone();
+        move |verb, key| send(Cmd::SessionAct(verb, key))
+    });
     ui.on_properties({
         let send = send.clone();
         move |k| send(Cmd::Properties(k))
@@ -104,6 +123,9 @@ fn main() -> Result<(), slint::PlatformError> {
         let page = match page.as_str() {
             "processes" => Page::Processes,
             "details" => Page::Details,
+            "services" => Page::Services,
+            "startup" => Page::Startup,
+            "users" => Page::Users,
             _ => Page::Performance,
         };
         ui.set_page(page);
@@ -160,12 +182,22 @@ enum Cmd {
     Action(SharedString, SharedString),
     Properties(SharedString),
     AffinityQuery(SharedString),
+    /// Services page: false = system services, true = the user's.
+    ServiceBus(bool),
+    /// (start|stop|restart|enable|disable, unit name without .service)
+    ServiceAct(SharedString, SharedString),
+    /// A service action finished; reload unit-file states.
+    ServicesChanged,
+    StartupToggle(SharedString, bool),
+    /// (lock|terminate, session id)
+    SessionAct(SharedString, SharedString),
 }
 
 /// Samples on a background thread and pushes updates into the UI.
 /// Per-process data is only collected while a page that shows it is open.
 fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
     let (tx, rx) = mpsc::channel::<Cmd>();
+    let tx_back = tx.clone();
     std::thread::Builder::new()
         .name("sampler".into())
         .spawn(move || {
@@ -178,6 +210,10 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
             let mut perf_tab = 0;
             let mut last: (Snapshot, Vec<Process>) = Default::default();
             let mut gpu_total = 0.0f32;
+            let mut services: Option<Services> = None;
+            let mut service_bus = Bus::System;
+            let mut service_list: Vec<Service> = Vec::new();
+            let mut logind: Option<Logind> = None;
             let mut interval = Some(Duration::from_millis(1000));
             // The first tick comes quickly so the window doesn't sit on placeholders.
             let mut wait = Some(Duration::from_millis(250));
@@ -192,7 +228,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                     Some(d) => rx.recv_timeout(d),
                     None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
                 };
-                let shows_procs = |p: Page| matches!(p, Page::Processes | Page::Details);
+                let shows_procs = |p: Page| matches!(p, Page::Processes | Page::Details | Page::Users);
                 match msg {
                     Ok(Cmd::Interval(ms)) => {
                         let resumed = interval.is_none() && ms > 0;
@@ -211,6 +247,13 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                         match cmd {
                             Cmd::Page(p) => {
                                 page = p;
+                                if p == Page::Startup {
+                                    push_startup(&ui);
+                                }
+                                if p == Page::Services {
+                                    let svc = services.get_or_insert_with(Services::new);
+                                    service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                }
                                 // Sample right away so the table isn't empty for a whole interval.
                                 if shows_procs(p) {
                                     let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
@@ -222,7 +265,50 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                                 continue;
                             }
                             Cmd::Sort(c) => view.set_sort(c),
-                            Cmd::Filter(f) => view.filter = f.to_string(),
+                            Cmd::Filter(f) => {
+                                view.filter = f.to_string();
+                                if page == Page::Services {
+                                    let (rows, summary) = system_pages::service_rows(&service_list, &view.filter);
+                                    let _ = ui.upgrade_in_event_loop(move |ui| {
+                                        bridge::sync(ui.get_service_rows(), rows, |m| ui.set_service_rows(m));
+                                        ui.set_service_summary(summary.into());
+                                    });
+                                    continue;
+                                }
+                            }
+                            Cmd::ServiceBus(user) => {
+                                service_bus = if user { Bus::User } else { Bus::System };
+                                let svc = services.get_or_insert_with(Services::new);
+                                service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                continue;
+                            }
+                            Cmd::ServiceAct(verb, name) => {
+                                service_action(&ui, &tx_back, service_bus, &verb, &name);
+                                continue;
+                            }
+                            Cmd::ServicesChanged => {
+                                if let Some(svc) = services.as_mut() {
+                                    // Our own connection's cache is stale after another connection changed units.
+                                    *svc = Services::new();
+                                    service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                }
+                                continue;
+                            }
+                            Cmd::StartupToggle(id, on) => {
+                                let msg = match taskmonitor_core::startup::set_enabled(&id, on) {
+                                    Ok(()) => None,
+                                    Err(e) => Some(format!("Couldn't change startup setting: {e}")),
+                                };
+                                push_startup(&ui);
+                                if let Some(msg) = msg {
+                                    let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
+                                }
+                                continue;
+                            }
+                            Cmd::SessionAct(verb, key) => {
+                                session_action(&ui, &verb, &key);
+                                continue;
+                            }
                             Cmd::Toggle(k) => view.toggle(k),
                             Cmd::Action(a, k) => {
                                 run_action(&ui, &a, &k, last.1.clone());
@@ -265,6 +351,15 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                     if !push_rows(&view, page, &last, gpu_total) {
                         break;
                     }
+                }
+                if page == Page::Services {
+                    let svc = services.get_or_insert_with(Services::new);
+                    service_list = push_services(&ui, svc, service_bus, &view.filter);
+                }
+                if page == Page::Users {
+                    let sessions: Vec<Session> = logind.get_or_insert_with(Logind::new).sessions().unwrap_or_default();
+                    let rows = system_pages::user_rows(&sessions, &last.1, &last.0);
+                    let _ = ui.upgrade_in_event_loop(move |ui| bridge::sync(ui.get_user_rows(), rows, |m| ui.set_user_rows(m)));
                 }
             }
         })
@@ -309,4 +404,68 @@ fn show_affinity(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
         }
         Err(e) => ui.set_toast(format!("Can't read affinity of {title}: {}", e.desc()).into()),
     });
+}
+
+fn push_services(ui: &slint::Weak<MainWindow>, svc: &Services, bus: Bus, filter: &str) -> Vec<Service> {
+    let list = match svc.list(bus) {
+        Ok(list) => list,
+        Err(e) => {
+            let msg = format!("Can't read services: {e}");
+            let _ = ui.upgrade_in_event_loop(move |ui| ui.set_service_summary(msg.into()));
+            return Vec::new();
+        }
+    };
+    let (rows, summary) = system_pages::service_rows(&list, filter);
+    let _ = ui.upgrade_in_event_loop(move |ui| {
+        bridge::sync(ui.get_service_rows(), rows, |m| ui.set_service_rows(m));
+        ui.set_service_summary(summary.into());
+    });
+    list
+}
+
+fn push_startup(ui: &slint::Weak<MainWindow>) {
+    let rows = system_pages::startup_rows(&taskmonitor_core::startup::list());
+    let _ = ui.upgrade_in_event_loop(move |ui| bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m)));
+}
+
+/// systemd may show a password prompt, so this runs on its own thread with its own connection.
+fn service_action(ui: &slint::Weak<MainWindow>, done: &mpsc::Sender<Cmd>, bus: Bus, verb: &str, name: &str) {
+    let (ui, done, verb, unit) = (ui.clone(), done.clone(), verb.to_owned(), format!("{name}.service"));
+    std::thread::spawn(move || {
+        let msg = match Services::new().control(bus, &verb, &unit) {
+            Ok(()) => {
+                let past = match verb.as_str() {
+                    "start" => "Started",
+                    "stop" => "Stopped",
+                    "restart" => "Restarted",
+                    "enable" => "Enabled",
+                    _ => "Disabled",
+                };
+                format!("{past} {unit}")
+            }
+            Err(e) => format!("Couldn't {verb} {unit}: {}", dbus_error(&e)),
+        };
+        let _ = done.send(Cmd::ServicesChanged);
+        let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
+    });
+}
+
+fn session_action(ui: &slint::Weak<MainWindow>, verb: &str, session: &str) {
+    let (ui, verb, session) = (ui.clone(), verb.to_owned(), session.to_owned());
+    std::thread::spawn(move || {
+        let msg = match Logind::new().control(&verb, &session) {
+            Ok(()) if verb == "lock" => format!("Locked session {session}"),
+            Ok(()) => format!("Signing out session {session}"),
+            Err(e) => format!("Couldn't change session {session}: {}", dbus_error(&e)),
+        };
+        let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
+    });
+}
+
+/// The human part of a D-Bus error ("Access denied" rather than the error name).
+fn dbus_error(e: &zbus::Error) -> String {
+    match e {
+        zbus::Error::MethodError(_, Some(detail), _) => detail.clone(),
+        other => other.to_string(),
+    }
 }

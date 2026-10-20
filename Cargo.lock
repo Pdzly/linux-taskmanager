@@ -4420,6 +4420,7 @@ dependencies = [
  "slint",
  "slint-build",
  "taskmonitor-core",
+ "zbus",
 ]
 
 [[package]]
@@ -4429,6 +4430,7 @@ dependencies = [
  "libc",
  "nix 0.31.3",
  "nvml-wrapper",
+ "zbus",
 ]
 
 [[package]]

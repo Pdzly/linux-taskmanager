@@ -7,8 +7,8 @@ import "../fonts/MonaSansMono-Medium.ttf";
 import "../fonts/lucide-subset.ttf";
 
 import { Theme, Page } from "theme.slint";
-import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow } from "types.slint";
-export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow }
+import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow } from "types.slint";
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
@@ -16,6 +16,9 @@ import { PlaceholderPage } from "pages/placeholder.slint";
 import { ProcessesPage } from "pages/processes.slint";
 import { DetailsPage } from "pages/details.slint";
 import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast } from "dialogs.slint";
+import { ServicesPage } from "pages/services.slint";
+import { StartupPage } from "pages/startup.slint";
+import { UsersPage } from "pages/users.slint";
 
 export component MainWindow inherits Window {
     title: "TaskMonitor";
@@ -55,6 +58,17 @@ export component MainWindow inherits Window {
     callback toggle(string);
     callback filter-changed(string);
 
+    // Services, startup apps, users
+    in property <[ServiceRow]> service-rows;
+    in property <string> service-summary;
+    in-out property <bool> service-user-bus;
+    in property <[StartupRow]> startup-rows;
+    in property <[UserRow]> user-rows;
+    callback service-bus-changed(bool);
+    callback service-act(string, string);
+    callback startup-toggled(string, bool);
+    callback session-act(string, string);
+
     // Process actions
     in-out property <string> toast;
     in property <string> props-title;
@@ -74,7 +88,7 @@ export component MainWindow inherits Window {
 
     // Kill and End process tree can lose work, so they ask first.
     function request(action: string, key: string) {
-        if action == "kill" || action == "tree" {
+        if action == "kill" || action == "tree" || action == "terminate" {
             root.confirm-action = action;
             root.confirm-key = key;
         } else {
@@ -130,6 +144,10 @@ export component MainWindow inherits Window {
                 gpus: root.gpus;
                 tab <=> root.perf-tab;
                 tab-changed(t) => { root.perf-tab-changed(t); }
+                open-users => {
+                    root.page = Page.users;
+                    root.page-changed(Page.users);
+                }
                 run-command(cmd) => { root.run-command(cmd); }
             }
             if root.page == Page.processes: ProcessesPage {
@@ -150,8 +168,20 @@ export component MainWindow inherits Window {
                 }
             }
             if root.page == Page.history: PlaceholderPage { title: "App history"; note: "Per-app resource history arrives in M6."; }
-            if root.page == Page.startup: PlaceholderPage { title: "Startup apps"; note: "Autostart entries arrive in M5."; }
-            if root.page == Page.users: PlaceholderPage { title: "Users"; note: "Sessions and per-user usage arrive in M5."; }
+            if root.page == Page.startup: StartupPage {
+                rows: root.startup-rows;
+                toggled(id, on) => { root.startup-toggled(id, on); }
+            }
+            if root.page == Page.users: UsersPage {
+                rows: root.user-rows;
+                act(verb, key) => {
+                    if verb == "terminate" {
+                        root.request(verb, key);
+                    } else {
+                        root.session-act(verb, key);
+                    }
+                }
+            }
             if root.page == Page.details: DetailsPage {
                 rows: root.detail-rows;
                 totals: root.proc-totals;
@@ -168,7 +198,18 @@ export component MainWindow inherits Window {
                     root.affinity-query(k);
                 }
             }
-            if root.page == Page.services: PlaceholderPage { title: "Services"; note: "systemd units arrive in M5."; }
+            if root.page == Page.services: ServicesPage {
+                rows: root.service-rows;
+                summary: root.service-summary;
+                user-bus: root.service-user-bus;
+                filter <=> root.filter;
+                filter-edited(t) => { root.filter-changed(t); }
+                bus-changed(user) => {
+                    root.service-user-bus = user;
+                    root.service-bus-changed(user);
+                }
+                act(verb, name) => { root.service-act(verb, name); }
+            }
             if root.page == Page.settings: PlaceholderPage { title: "Settings"; note: "Theme, refresh rate and defaults arrive in M6."; }
         }
     }
@@ -176,14 +217,22 @@ export component MainWindow inherits Window {
     if root.confirm-action != "": ConfirmDialog {
         width: root.width;
         height: root.height;
-        title: root.confirm-action == "kill" ? "Kill this process?" : "End the whole process tree?";
+        title: root.confirm-action == "kill" ? "Kill this process?"
+            : root.confirm-action == "terminate" ? "Sign out this session?"
+            : "End the whole process tree?";
         message: root.confirm-action == "kill"
             ? "It stops immediately, without a chance to save. Unsaved work in it will be lost."
+            : root.confirm-action == "terminate"
+            ? "Every app in the session is closed. Unsaved work in them will be lost."
             : "This ends the process and every process it started. Unsaved work in any of them will be lost.";
-        confirm-text: root.confirm-action == "kill" ? "Kill" : "End process tree";
+        confirm-text: root.confirm-action == "kill" ? "Kill" : root.confirm-action == "terminate" ? "Sign out" : "End process tree";
         dismiss => { root.confirm-action = ""; }
         confirmed => {
-            root.action(root.confirm-action, root.confirm-key);
+            if root.confirm-action == "terminate" {
+                root.session-act("terminate", root.confirm-key);
+            } else {
+                root.action(root.confirm-action, root.confirm-key);
+            }
             root.confirm-action = "";
         }
     }

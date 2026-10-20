@@ -179,7 +179,9 @@ Result: Intel Iris Xe via i915 fdinfo (per-process and total, own processes only
 - Intel/AMD through sysfs and DRM `fdinfo` engine counters, both per-GPU and per-process.
 - **Done when:** both of your GPUs show up and a game or video shows per-process GPU %.
 
-### M5: Services, Startup, Users (3 days)
+### M5: Services, Startup, Users (3 days) ✅ done (service/session actions not yet tried against a real polkit prompt)
+Result: Services lists system and user units (405 here) with status, startup type and PID (from cgroups, not one D-Bus call each), start/stop/restart/enable/disable through systemd with interactive polkit auth. Unit-file states are cached for 60 s because systemd's ListUnitFiles takes ~350 ms; a refresh costs 7 ms. Startup apps toggles XDG autostart entries through `Hidden=true` overrides in ~/.config/autostart (system files untouched). Users lists logind sessions with per-user CPU/memory, Lock and Sign out (confirmed). "Startup impact" is not measured.
+
 - systemd units over D-Bus: list, filter, start/stop/restart, enable/disable.
 - Autostart `.desktop` plus `systemd --user` toggles; startup impact from `systemd-analyze` data where available.
 - logind sessions with per-UID aggregation, plus log off/terminate session.

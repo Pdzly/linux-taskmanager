@@ -306,3 +306,32 @@ export component Logo inherits Rectangle {
         stroke-line-join: round;
     }
 }
+
+// On/off switch.
+export component Switch inherits Rectangle {
+    in property <bool> on;
+    in property <string> label;
+    callback toggled();
+
+    width: 44px;
+    height: 26px;
+    border-radius: 13px;
+    background: root.on ? Theme.text : Theme.hover;
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+    accessible-action-default => { root.toggled(); }
+
+    Rectangle {
+        x: root.on ? parent.width - self.width - 3px : 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: root.on ? Theme.accent : Theme.card;
+        animate x { duration: 150ms; easing: ease-out; }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.toggled(); }
+    }
+}

@@ -295,13 +295,13 @@ fn mb(bps: f64) -> String {
     if v < 0.05 { "0".into() } else { format!("{v:.1}") }
 }
 
-fn mem_text(bytes: u64) -> String {
+pub fn mem_text(bytes: u64) -> String {
     let mib = bytes as f64 / (1024.0 * 1024.0);
     if mib >= 1000.0 { format!("{:.1} GB", mib / 1024.0) } else { format!("{mib:.1} MB") }
 }
 
 /// "gnome-text-editor" -> "GT", "firefox" -> "Fi".
-fn initials(name: &str) -> String {
+pub fn initials(name: &str) -> String {
     let mut words = name.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty());
     let first = words.next().unwrap_or("?");
     let mut out: String = first.chars().take(1).flat_map(char::to_uppercase).collect();
@@ -313,7 +313,7 @@ fn initials(name: &str) -> String {
 }
 
 /// Stable badge colour per name.
-fn tone(name: &str) -> i32 {
+pub fn tone(name: &str) -> i32 {
     (name.bytes().fold(0u32, |h, b| h.wrapping_mul(31).wrapping_add(b as u32)) % 5) as i32
 }
 

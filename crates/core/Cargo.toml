@@ -8,3 +8,4 @@ publish.workspace = true
 libc = "0.2.191"
 nix = { version = "0.31.3", default-features = false, features = ["net", "user", "feature", "signal", "sched"] }
 nvml-wrapper = "0.13.0"
+zbus = "5.19"
