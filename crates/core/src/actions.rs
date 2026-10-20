@@ -146,6 +146,7 @@ mod tests {
             threads: 1,
             nice: 0,
             efficiency: false,
+            gpu: 0.0,
             group: Group::Background,
         }
     }

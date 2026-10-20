@@ -8,7 +8,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use slint::{Model, ModelRc, SharedString, VecModel};
-use taskmonitor_core::{Process, ProcessSampler, Sampler, Snapshot};
+use taskmonitor_core::{GpuSampler, Process, ProcessSampler, Sampler, Snapshot};
 
 slint::include_modules!();
 
@@ -38,6 +38,10 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_page_changed({
         let send = send.clone();
         move |p| send(Cmd::Page(p))
+    });
+    ui.on_perf_tab_changed({
+        let send = send.clone();
+        move |t| send(Cmd::PerfTab(t))
     });
     ui.on_sort({
         let send = send.clone();
@@ -105,6 +109,10 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_page(page);
         ui.invoke_page_changed(page);
     }
+    if let Some(tab) = std::env::var("TASKMONITOR_TAB").ok().and_then(|t| t.parse().ok()) {
+        ui.set_perf_tab(tab);
+        ui.invoke_perf_tab_changed(tab);
+    }
 
     // Dev aid: TASKMONITOR_SNAPSHOT=out.ppm saves the rendered window and quits.
     // Wayland compositors block outside screenshots, so this is how we check the UI.
@@ -143,6 +151,8 @@ enum Cmd {
     /// Refresh interval in ms; 0 pauses.
     Interval(u64),
     Page(Page),
+    /// Performance page tab: 0 disk, 1 network, 2 GPU.
+    PerfTab(i32),
     Sort(SharedString),
     Filter(SharedString),
     Toggle(SharedString),
@@ -163,14 +173,17 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
             let mut procs_sampler: Option<ProcessSampler> = None;
             let mut histories = bridge::Histories::default();
             let mut view = processes::View::default();
+            let mut gpu_sampler = GpuSampler::new();
             let mut page = Page::Performance;
+            let mut perf_tab = 0;
             let mut last: (Snapshot, Vec<Process>) = Default::default();
+            let mut gpu_total = 0.0f32;
             let mut interval = Some(Duration::from_millis(1000));
             // The first tick comes quickly so the window doesn't sit on placeholders.
             let mut wait = Some(Duration::from_millis(250));
 
-            let push_rows = |view: &processes::View, page: Page, last: &(Snapshot, Vec<Process>)| {
-                let rows = view.build(page, &last.1, &last.0);
+            let push_rows = |view: &processes::View, page: Page, last: &(Snapshot, Vec<Process>), gpu_total: f32| {
+                let rows = view.build(page, &last.1, &last.0, gpu_total);
                 ui.upgrade_in_event_loop(move |ui| processes::apply(&ui, rows)).is_ok()
             };
 
@@ -204,6 +217,10 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                                     last.1 = ps.sample();
                                 }
                             }
+                            Cmd::PerfTab(t) => {
+                                perf_tab = t;
+                                continue;
+                            }
                             Cmd::Sort(c) => view.set_sort(c),
                             Cmd::Filter(f) => view.filter = f.to_string(),
                             Cmd::Toggle(k) => view.toggle(k),
@@ -221,7 +238,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                             }
                             Cmd::Interval(_) => unreachable!(),
                         }
-                        if shows_procs(page) && !push_rows(&view, page, &last) {
+                        if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
                             break;
                         }
                         continue;
@@ -231,14 +248,21 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                 }
                 wait = interval;
                 let snap = sampler.sample();
-                let update = bridge::build(&snap, &mut histories);
+                // NVIDIA is only queried where its numbers are shown (see gpu.rs on why).
+                let gpu_detail = page == Page::Processes || (page == Page::Performance && perf_tab == 2);
+                let (gpus, gpu_per_pid) = gpu_sampler.sample(gpu_detail);
+                gpu_total = gpus.iter().filter_map(|g| g.usage).fold(0.0, f32::max);
+                let update = bridge::build(&snap, &gpus, &mut histories);
                 if ui.upgrade_in_event_loop(move |ui| bridge::apply(&ui, update)).is_err() {
                     break; // window closed
                 }
                 last.0 = snap;
                 if shows_procs(page) {
                     last.1 = procs_sampler.get_or_insert_with(ProcessSampler::new).sample();
-                    if !push_rows(&view, page, &last) {
+                    for p in &mut last.1 {
+                        p.gpu = gpu_per_pid.get(&p.pid).copied().unwrap_or(0.0);
+                    }
+                    if !push_rows(&view, page, &last, gpu_total) {
                         break;
                     }
                 }

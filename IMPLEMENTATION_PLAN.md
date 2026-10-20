@@ -172,7 +172,9 @@ Result: right-click menu on Processes and Details rows (End task, End process tr
 - Helper binary, polkit policy and `pkexec` path for `EPERM`; confirmation dialogs for destructive actions.
 - **Done when:** you can kill your own process directly and a root process after a polkit prompt.
 
-### M4: GPU (2–3 days)
+### M4: GPU (2–3 days) ✅ done
+Result: Intel Iris Xe via i915 fdinfo (per-process and total, own processes only) + sysfs clocks; NVIDIA RTX 3060 via NVML (usage, VRAM, temperature, clock, power, per-process). AMD paths (gpu_busy_percent, VRAM, hwmon) written but untested on this machine. NVML is only opened on the GPU tab or Processes page while the card is awake, and dropped elsewhere so the dGPU can power down. GPU tick 1.6 ms without NVML, ~9 ms with. Loading NVML adds ~20 MB RSS.
+
 - NVIDIA through NVML: utilization, VRAM, temperature, power, per-process usage. Respect dGPU runtime suspend.
 - Intel/AMD through sysfs and DRM `fdinfo` engine counters, both per-GPU and per-process.
 - **Done when:** both of your GPUs show up and a game or video shows per-process GPU %.

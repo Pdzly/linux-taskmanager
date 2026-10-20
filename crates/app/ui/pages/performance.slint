@@ -417,9 +417,13 @@ export component PerformancePage inherits VerticalLayout {
     in property <[float]> core-load;
     in property <[DeviceView]> disks;
     in property <[DeviceView]> nets;
+    in property <[DeviceView]> gpus;
+    in-out property <int> tab: 0;
     callback run-command(string);
+    callback tab-changed(int);
 
-    property <int> tab: 0;
+    changed tab => { root.tab-changed(self.tab); }
+    property <int> gpu-index: 0;
     property <int> disk-index: 0;
     property <int> net-index: 0;
 
@@ -482,7 +486,9 @@ export component PerformancePage inherits VerticalLayout {
             if root.tab == 2: DeviceCard {
                 horizontal-stretch: 1.4;
                 title: "Graphics";
-                empty-text: "GPU monitoring arrives in M4";
+                empty-text: "No GPUs found";
+                devices: root.gpus;
+                selected <=> root.gpu-index;
             }
             RunTaskCard {
                 horizontal-stretch: 1.1;

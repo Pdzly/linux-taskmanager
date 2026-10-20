@@ -37,6 +37,9 @@ export component MainWindow inherits Window {
     in property <[float]> core-load;
     in property <[DeviceView]> disks;
     in property <[DeviceView]> nets;
+    in property <[DeviceView]> gpus;
+    in-out property <int> perf-tab;
+    callback perf-tab-changed(int);
     in property <[ProcRow]> proc-rows;
     in property <[DetailRow]> detail-rows;
     in property <ProcTotals> proc-totals;
@@ -124,6 +127,9 @@ export component MainWindow inherits Window {
                 core-load: root.core-load;
                 disks: root.disks;
                 nets: root.nets;
+                gpus: root.gpus;
+                tab <=> root.perf-tab;
+                tab-changed(t) => { root.perf-tab-changed(t); }
                 run-command(cmd) => { root.run-command(cmd); }
             }
             if root.page == Page.processes: ProcessesPage {

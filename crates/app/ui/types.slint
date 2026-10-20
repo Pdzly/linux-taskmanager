@@ -69,6 +69,8 @@ export struct ProcRow {
     mem-heat: float,
     disk: string,
     disk-heat: float,
+    gpu: string,
+    gpu-heat: float,
     suspended: bool,
     efficiency: bool,
 }
@@ -79,6 +81,7 @@ export struct ProcTotals {
     cpu: string,
     mem: string,
     disk: string,
+    gpu: string,
 }
 
 export struct DetailRow {

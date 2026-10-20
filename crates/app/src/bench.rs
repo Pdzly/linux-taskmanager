@@ -42,7 +42,7 @@ struct Bench {
 impl Bench {
     /// Applies one real sample and renders; returns (time, repainted pixels).
     fn tick(&mut self) -> (Duration, u64) {
-        bridge::apply(&self.ui, bridge::build(&self.sampler.sample(), &mut self.histories));
+        bridge::apply(&self.ui, bridge::build(&self.sampler.sample(), &[], &mut self.histories));
         self.render()
     }
 

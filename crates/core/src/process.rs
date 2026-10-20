@@ -41,6 +41,8 @@ pub struct Process {
     pub nice: i32,
     /// Running under SCHED_IDLE (TaskMonitor's "Efficiency mode").
     pub efficiency: bool,
+    /// Busiest GPU engine, `0.0..=1.0`. Filled in from [`crate::GpuSampler`].
+    pub gpu: f32,
     pub group: Group,
 }
 
@@ -237,6 +239,7 @@ impl ProcessSampler {
             threads: stat.threads,
             nice: stat.nice,
             efficiency: stat.efficiency,
+            gpu: 0.0,
             group: e.group.clone(),
         })
     }

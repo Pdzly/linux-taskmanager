@@ -42,13 +42,14 @@ impl View {
         }
     }
 
-    pub fn build(&self, page: Page, procs: &[Process], snap: &Snapshot) -> Rows {
+    pub fn build(&self, page: Page, procs: &[Process], snap: &Snapshot, gpu_total: f32) -> Rows {
         let disk_bps: f64 = snap.disks.iter().map(|d| d.rates.read_bps + d.rates.write_bps).sum();
         let totals = ProcTotals {
             count: format!("{} processes", procs.len()).into(),
             cpu: format!("{:.0}%", snap.cpu_usage * 100.0).into(),
             mem: format!("{:.0}%", snap.memory.used() as f64 * 100.0 / snap.memory.total.max(1) as f64).into(),
             disk: format!("{} MB/s", mb(disk_bps)).into(),
+            gpu: format!("{:.0}%", gpu_total * 100.0).into(),
         };
         let filter = self.filter.to_lowercase();
         let matches = |p: &Process| {
@@ -124,7 +125,7 @@ impl View {
                     status: status_short(item.members.iter().map(|p| (p.state, p.efficiency))).into(),
                     suspended: item.members.iter().all(|p| p.state == 'T'),
                     efficiency: item.members.iter().all(|p| p.efficiency),
-                    ..item_row(&item.name, item.cpu, item.mem, item.disk, ctx)
+                    ..item_row(&item.name, item.cpu, item.mem, item.disk, item.gpu, ctx)
                 });
                 if expanded && !single {
                     let mut members = item.members;
@@ -137,7 +138,7 @@ impl View {
                             status: status_short([(p.state, p.efficiency)]).into(),
                             suspended: p.state == 'T',
                             efficiency: p.efficiency,
-                            ..item_row(&p.name, p.cpu, p.memory, p.read_bps + p.write_bps, ctx)
+                            ..item_row(&p.name, p.cpu, p.memory, p.read_bps + p.write_bps, p.gpu, ctx)
                         });
                     }
                 }
@@ -159,6 +160,7 @@ struct Item<'a> {
     cpu: f32,
     mem: u64,
     disk: f64,
+    gpu: f32,
 }
 
 impl<'a> Item<'a> {
@@ -167,6 +169,7 @@ impl<'a> Item<'a> {
             cpu: members.iter().map(|p| p.cpu).sum(),
             mem: members.iter().map(|p| p.memory).sum(),
             disk: members.iter().map(|p| p.read_bps + p.write_bps).sum(),
+            gpu: members.iter().map(|p| p.gpu).sum::<f32>().min(1.0),
             key,
             name,
             members,
@@ -178,6 +181,7 @@ impl<'a> Item<'a> {
             "cpu" => self.cpu.total_cmp(&other.cpu),
             "mem" => self.mem.cmp(&other.mem),
             "disk" => self.disk.total_cmp(&other.disk),
+            "gpu" => self.gpu.total_cmp(&other.gpu),
             _ => cmp_names(&self.name, &other.name),
         }
     }
@@ -200,7 +204,7 @@ pub struct Rows {
     pub ascending: bool,
 }
 
-fn item_row(name: &str, cpu: f32, mem: u64, disk_bps: f64, ctx: &Ctx) -> ProcRow {
+fn item_row(name: &str, cpu: f32, mem: u64, disk_bps: f64, gpu: f32, ctx: &Ctx) -> ProcRow {
     ProcRow {
         name: name.into(),
         initials: initials(name).into(),
@@ -212,6 +216,8 @@ fn item_row(name: &str, cpu: f32, mem: u64, disk_bps: f64, ctx: &Ctx) -> ProcRow
         mem_heat: (mem as f64 / ctx.mem_total * 8.0).clamp(0.0, 1.0) as f32,
         disk: format!("{} MB/s", mb(disk_bps)).into(),
         disk_heat: (disk_bps / (50.0 * 1024.0 * 1024.0)).clamp(0.0, 1.0) as f32,
+        gpu: format!("{:.0}%", gpu * 100.0).into(),
+        gpu_heat: (gpu * 2.0).clamp(0.0, 1.0),
         ..Default::default()
     }
 }
@@ -239,6 +245,7 @@ fn cmp_procs(a: &Process, b: &Process, column: &str) -> Ordering {
         "cpu" => a.cpu.total_cmp(&b.cpu),
         "mem" => a.memory.cmp(&b.memory),
         "disk" => (a.read_bps + a.write_bps).total_cmp(&(b.read_bps + b.write_bps)),
+        "gpu" => a.gpu.total_cmp(&b.gpu),
         "threads" => a.threads.cmp(&b.threads),
         "nice" => a.nice.cmp(&b.nice),
         "user" => a.user.cmp(&b.user),
@@ -341,6 +348,7 @@ mod tests {
             threads: 1,
             nice: 0,
             efficiency: false,
+            gpu: 0.0,
             group,
         }
     }
@@ -362,7 +370,7 @@ mod tests {
         let snap = Snapshot::default();
         let mut v = View::default();
 
-        let rows = v.build(Page::Processes, &procs, &snap).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
         assert_eq!(
             names(&rows),
             ["Apps (1)", "  Web", "Background processes (1)", "  bash", "System processes (1)", "  systemd"]
@@ -372,16 +380,16 @@ mod tests {
 
         v.toggle("app:org.web".into());
         v.set_sort("cpu".into());
-        let rows = v.build(Page::Processes, &procs, &snap).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
         assert_eq!(names(&rows)[1..4], ["  Web", "    web-gpu", "    web"], "children sorted by CPU, largest first");
 
         v.filter = "bas".into();
-        let rows = v.build(Page::Processes, &procs, &snap).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
         assert_eq!(names(&rows), ["Background processes (1)", "  bash"]);
 
         // Details lists every process, kernel threads included.
         v.filter.clear();
-        assert_eq!(v.build(Page::Details, &procs, &snap).details.len(), 5);
+        assert_eq!(v.build(Page::Details, &procs, &snap, 0.0).details.len(), 5);
     }
 
     #[test]

@@ -101,6 +101,7 @@ component Row inherits Rectangle {
         HeatCell { width: Cols.num; text: root.item.cpu; heat: root.item.cpu-heat; }
         HeatCell { width: Cols.num; text: root.item.mem; heat: root.item.mem-heat; }
         HeatCell { width: Cols.num; text: root.item.disk; heat: root.item.disk-heat; }
+        HeatCell { width: Cols.num; text: root.item.gpu; heat: root.item.gpu-heat; }
     }
 
     // On top of the row: takes right-clicks, lets left-clicks through to the row.
@@ -208,6 +209,16 @@ export component ProcessesPage inherits Card {
                 title: "Disk";
                 total: root.totals.disk;
                 column: "disk";
+                numeric: true;
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+            HeaderCell {
+                width: Cols.num;
+                title: "GPU";
+                total: root.totals.gpu;
+                column: "gpu";
                 numeric: true;
                 sort-column: root.sort-column;
                 ascending: root.ascending;

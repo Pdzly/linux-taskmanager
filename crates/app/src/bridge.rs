@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Write;
 
 use slint::{Model, ModelRc, VecModel};
-use taskmonitor_core::{History, Snapshot};
+use taskmonitor_core::{Gpu, History, Snapshot};
 
 use crate::format;
 use crate::{CpuView, DeviceView, MainWindow, MemView, Metric, Summary, SysView};
@@ -66,9 +66,10 @@ pub struct Update {
     core_load: Vec<f32>,
     disks: Vec<Device>,
     nets: Vec<Device>,
+    gpus: Vec<Device>,
 }
 
-pub fn build(s: &Snapshot, h: &mut Histories) -> Update {
+pub fn build(s: &Snapshot, gpus: &[Gpu], h: &mut Histories) -> Update {
     h.cpu.push(s.cpu_usage);
     let (cpu_line, cpu_fill) = graph(&h.cpu, 1.0);
     let m = &s.memory;
@@ -148,12 +149,15 @@ pub fn build(s: &Snapshot, h: &mut Histories) -> Update {
         })
         .collect();
 
+    let gpu_devices = gpus.iter().enumerate().map(|(i, g)| gpu_device(i, g, h)).collect();
+    let busiest_gpu = gpus.iter().filter_map(|g| g.usage).reduce(f32::max);
+
     let uptime = format::uptime(s.uptime_secs);
     Update {
         summary: Summary {
             cpu: format!("{:.0}%", s.cpu_usage * 100.0).into(),
             ram: format!("{}/{} GB", format::gib(m.used()), format::gib(m.total)).into(),
-            gpu: "—".into(),
+            gpu: busiest_gpu.map_or_else(|| "—".into(), |u| format!("{:.0}%", u * 100.0)).into(),
             uptime: uptime.into(),
         },
         cpu: CpuView {
@@ -181,6 +185,49 @@ pub fn build(s: &Snapshot, h: &mut Histories) -> Update {
         core_load: s.core_usage.clone(),
         disks,
         nets,
+        gpus: gpu_devices,
+    }
+}
+
+/// One GPU for the Graphics tab: usage (series A) and memory use (series B), both 0–100%.
+fn gpu_device(i: usize, g: &Gpu, h: &mut Histories) -> Device {
+    let (usage_h, mem_h) = h.device(format!("gpu:{}", g.slot));
+    let mem_frac = match (g.mem_used, g.mem_total) {
+        (Some(u), Some(t)) if t > 0 => Some(u as f32 / t as f32),
+        _ => None,
+    };
+    usage_h.push(g.usage.unwrap_or(0.0));
+    mem_h.push(mem_frac.unwrap_or(0.0));
+    let (line_a, fill_a) = graph(usage_h, 1.0);
+    let (line_b, _) = if mem_frac.is_some() { graph(mem_h, 1.0) } else { (String::new(), String::new()) };
+    let dash = || "—".to_owned();
+    let state = if g.asleep {
+        " · Sleeping to save power".to_owned()
+    } else if g.usage.is_none() {
+        " · Open this tab or Processes for live data".to_owned()
+    } else {
+        String::new()
+    };
+    let gb = |b: u64| format!("{:.1}", b as f64 / (1u64 << 30) as f64);
+    Device {
+        name: format!("GPU {i}"),
+        subtitle: format!("{} · {}{state}", g.name, g.driver),
+        metrics: vec![
+            metric("Usage", g.usage.map_or_else(dash, |u| format!("{:.0}", u * 100.0)), "%"),
+            match (g.mem_used, g.mem_total) {
+                (Some(u), Some(t)) => metric("Memory", format!("{}/{}", gb(u), gb(t)), "GB"),
+                _ => metric("Memory", "Shared".to_owned(), ""),
+            },
+            match (g.temp_c, g.freq_mhz) {
+                (Some(t), _) => metric("Temp", format!("{t:.0}"), "°C"),
+                (None, f) => metric("Clock", f.map_or_else(dash, |f| f.to_string()), "MHz"),
+            },
+            metric("Power", g.power_w.map_or_else(dash, |w| format!("{w:.1}")), "W"),
+        ],
+        line_a,
+        fill_a,
+        line_b,
+        scale: "100%".into(),
     }
 }
 
@@ -194,6 +241,7 @@ pub fn apply(ui: &MainWindow, u: Update) {
     sync(ui.get_core_load(), u.core_load, |m| ui.set_core_load(m));
     sync(ui.get_disks(), u.disks.into_iter().map(Device::into_view).collect(), |m| ui.set_disks(m));
     sync(ui.get_nets(), u.nets.into_iter().map(Device::into_view).collect(), |m| ui.set_nets(m));
+    sync(ui.get_gpus(), u.gpus.into_iter().map(Device::into_view).collect(), |m| ui.set_gpus(m));
 }
 
 /// Updates a model in place: changed rows are replaced, extra rows pushed or removed
