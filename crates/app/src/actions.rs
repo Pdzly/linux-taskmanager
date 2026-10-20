@@ -157,7 +157,15 @@ pub fn perform(action: &Action, key: &str, procs: &[Process]) -> String {
 /// Retries through the helper as root. pkexec shows the system's password prompt.
 fn elevate(action: &Action, pids: &[u32]) -> Result<(), String> {
     let Some(args) = action.helper_args() else { return Err("not permitted".into()) };
-    let helper = helper_path().ok_or("administrator helper not installed")?;
+    let helper = helper_path().ok_or_else(|| {
+        // An AppImage's files live on a per-user mount that root can't read, so the
+        // helper can't be run from inside it.
+        if std::env::var_os("APPIMAGE").is_some() {
+            "this needs administrator rights, which the AppImage can't request; install the .deb, .rpm or AUR package for that"
+        } else {
+            "administrator helper not installed"
+        }
+    })?;
     let out = Command::new("pkexec")
         .arg(helper)
         .args(args)

@@ -30,8 +30,10 @@ priority = "optional"
 extended-description = """\
 A modern task manager for Linux: apps and processes with CPU, memory, disk and GPU \
 use, live performance graphs, services, startup apps, users and app history."""
-# pkexec runs the helper for actions on processes you don't own.
-depends = "$auto, pkexec | policykit-1"
+# Spelled out instead of "$auto": the release binary is linked against glibc 2.28 and
+# loads libpthread/libdl itself, but dpkg-shlibdeps would demand libc6 >= 2.34 and block
+# Ubuntu 20.04 / Debian 11. pkexec runs the helper for actions on processes you don't own.
+depends = "libc6 (>= 2.28), libfontconfig1, pkexec | policykit-1"
 assets = [
     ["target/release/taskmonitor", "usr/bin/", "755"],
     # Root helper for actions on other users' processes; pkexec finds it here.
@@ -51,6 +53,33 @@ assets = [
     ["../../packaging/icons/hicolor/512x512/apps/io.github.taskmonitor.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
     ["fonts/OFL.txt", "usr/share/doc/taskmonitor/fonts/Mona-Sans-OFL.txt", "644"],
     ["fonts/LUCIDE-LICENSE", "usr/share/doc/taskmonitor/fonts/Lucide-LICENSE", "644"],
+]
+
+# Fedora / openSUSE / RHEL package: `packaging/build-all.sh` runs cargo-generate-rpm.
+[package.metadata.generate-rpm]
+summary = "A modern task manager for Linux"
+# RPM requires a License tag. Replace once a licence is chosen (see IMPLEMENTATION_PLAN.md).
+license = "LicenseRef-Unspecified"
+# pkexec ships in the "polkit" package on RPM distros.
+requires = { polkit = "*" }
+assets = [
+    { source = "target/release/taskmonitor", dest = "/usr/bin/taskmonitor", mode = "755" },
+    { source = "target/release/taskmonitor-helper", dest = "/usr/libexec/taskmonitor-helper", mode = "755" },
+    { source = "../../packaging/io.github.taskmonitor.policy", dest = "/usr/share/polkit-1/actions/io.github.taskmonitor.policy", mode = "644" },
+    { source = "../../packaging/io.github.taskmonitor.desktop", dest = "/usr/share/applications/io.github.taskmonitor.desktop", mode = "644" },
+    { source = "../../packaging/io.github.taskmonitor.metainfo.xml", dest = "/usr/share/metainfo/io.github.taskmonitor.metainfo.xml", mode = "644" },
+    { source = "../../packaging/icons/hicolor/scalable/apps/io.github.taskmonitor.svg", dest = "/usr/share/icons/hicolor/scalable/apps/io.github.taskmonitor.svg", mode = "644" },
+    { source = "../../packaging/icons/hicolor/16x16/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/16x16/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/22x22/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/22x22/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/24x24/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/24x24/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/32x32/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/32x32/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/48x48/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/48x48/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/64x64/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/64x64/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/128x128/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/128x128/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/256x256/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "../../packaging/icons/hicolor/512x512/apps/io.github.taskmonitor.png", dest = "/usr/share/icons/hicolor/512x512/apps/io.github.taskmonitor.png", mode = "644" },
+    { source = "fonts/OFL.txt", dest = "/usr/share/licenses/taskmonitor/Mona-Sans-OFL.txt", mode = "644" },
+    { source = "fonts/LUCIDE-LICENSE", dest = "/usr/share/licenses/taskmonitor/Lucide-LICENSE", mode = "644" },
 ]
 
 [features]
