@@ -157,7 +157,9 @@ Lessons: (1) never `animate` values that change every tick (each animation re-re
 - Refresh-rate menu and pause.
 - **Done when:** the numbers match `top`, `free -h`, `iostat -x 1` and `ip -s link` within rounding.
 
-### M2: Processes + Details (4–5 days)
+### M2: Processes + Details (4–5 days) ✅ done
+Result: apps detected from systemd scopes (`app-gnome-*`, `app-flatpak-*`, `snap.*`) matched to `.desktop` names; Apps / Background / System sections with expandable groups, heat-tinted CPU/memory/disk cells, sortable columns, search; Details lists every process including kernel threads. Process sampling: 6–8 ms per tick for ~480 processes (only while those pages are open); whole app ~2.1% CPU, 34 MB on the Processes page. Follow-up: shared with M1's render-cost work.
+
 - Per-process CPU, memory, I/O and threads, with cached static info and PID-reuse detection.
 - App grouping (cgroup scope plus `.desktop`), Apps vs Background sections, expandable trees.
 - Virtualized sortable table, search, column chooser, and in-place model diffing.

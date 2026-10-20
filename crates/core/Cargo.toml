@@ -5,4 +5,4 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-nix = { version = "0.31.3", default-features = false, features = ["net"] }
+nix = { version = "0.31.3", default-features = false, features = ["net", "user", "feature"] }

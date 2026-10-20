@@ -26,3 +26,4 @@ pause          pause
 play           play
 chevron-down   chevron-down
 chevron-up     chevron-up
+chevron-right  chevron-right

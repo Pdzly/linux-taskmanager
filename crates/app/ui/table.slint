@@ -1,0 +1,125 @@
+import { Theme } from "theme.slint";
+import { Icon } from "components.slint";
+import { Icons } from "icons.slint";
+
+export component SearchField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder: "Search by name, PID or command";
+    callback edited(string);
+
+    height: 44px;
+    min-width: 320px;
+    border-radius: self.height / 2;
+    background: Theme.tile;
+    border-width: input.has-focus ? 1.5px : 0px;
+    border-color: Theme.text-2;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon { glyph: Icons.search; size: 16px; tint: Theme.text-2; }
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            input := TextInput {
+                width: 100%;
+                height: 100%;
+                text <=> root.text;
+                vertical-alignment: center;
+                font-size: 13.5px;
+                color: Theme.text;
+                accessible-label: root.placeholder;
+                edited => { root.edited(self.text); }
+            }
+            if root.text == "": Text {
+                x: 0;
+                text: root.placeholder;
+                font-size: 13.5px;
+                color: Theme.text-2;
+            }
+        }
+    }
+}
+
+// Sortable column header. Numeric columns can show a machine total above the title,
+// like Windows Task Manager ("23%" over "CPU").
+export component HeaderCell inherits Rectangle {
+    in property <string> title;
+    in property <string> total;
+    in property <string> column;
+    in property <string> sort-column;
+    in property <bool> ascending;
+    in property <bool> numeric;
+    // Horizontal padding; set to match the row cells below the header.
+    in property <length> inset: 12px;
+    callback sort(string);
+
+    property <bool> sorted: root.column == root.sort-column;
+
+    border-radius: 10px;
+    background: ta.has-hover ? Theme.tile : transparent;
+    accessible-role: button;
+    accessible-label: "Sort by " + root.title;
+
+    HorizontalLayout {
+        padding-left: root.inset;
+        padding-right: root.inset;
+        padding-bottom: 6px;
+        spacing: 4px;
+        alignment: root.numeric ? end : start;
+        VerticalLayout {
+            alignment: end;
+            spacing: 0px;
+            if root.total != "": Text {
+                text: root.total;
+                font-size: 17px;
+                font-weight: 500;
+                font-family: Theme.mono;
+                color: Theme.text;
+                horizontal-alignment: root.numeric ? right : left;
+            }
+            Text {
+                text: root.title;
+                font-size: 12px;
+                font-weight: root.sorted ? 600 : 400;
+                color: root.sorted ? Theme.text : Theme.text-2;
+                horizontal-alignment: root.numeric ? right : left;
+            }
+        }
+        if root.sorted: VerticalLayout {
+            alignment: end;
+            Icon { glyph: root.ascending ? Icons.chevron-up : Icons.chevron-down; size: 13px; tint: Theme.text; }
+        }
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.sort(root.column); }
+    }
+}
+
+// Number cell tinted by intensity (Windows' heat map), in the app's accent colour.
+export component HeatCell inherits Rectangle {
+    in property <string> text;
+    in property <float> heat;
+
+    background: root.heat > 0.02 ? Theme.accent.with-alpha(0.12 + root.heat * 0.6) : transparent;
+
+    Text {
+        x: parent.width - self.width - 12px;
+        text: root.text;
+        font-size: 13px;
+        font-family: Theme.mono;
+        color: Theme.text;
+    }
+}
+
+export component Cell inherits Text {
+    font-size: 13px;
+    color: Theme.text;
+    vertical-alignment: center;
+    overflow: elide;
+}

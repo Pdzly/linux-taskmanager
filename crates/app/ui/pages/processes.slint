@@ -1,0 +1,201 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Card, Icon, Badge } from "../components.slint";
+import { Icons } from "../icons.slint";
+import { SearchField, HeaderCell, HeatCell, Cell } from "../table.slint";
+import { ProcRow, ProcTotals } from "../types.slint";
+
+// Shared column widths for header and rows.
+global Cols {
+    out property <length> status: 130px;
+    out property <length> num: 108px;
+}
+
+component Row inherits Rectangle {
+    in property <ProcRow> item;
+    in property <bool> selected;
+    callback select();
+    callback toggle();
+
+    height: item.kind == 0 ? 44px : 42px;
+    border-radius: 12px;
+    background: item.kind == 0 ? transparent : selected ? Theme.tile : ta.has-hover ? Theme.tile.with-alpha(0.5) : transparent;
+    clip: true;
+
+    ta := TouchArea {
+        enabled: root.item.kind != 0;
+        clicked => { root.select(); }
+        double-clicked => {
+            if root.item.expandable {
+                root.toggle();
+            }
+        }
+    }
+
+    if item.kind == 0: Text {
+        x: 12px;
+        y: parent.height - self.height - 8px;
+        text: root.item.name;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: Theme.text-2;
+    }
+
+    if item.kind != 0: HorizontalLayout {
+        spacing: 0px;
+
+        // Name cell
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            padding-left: root.item.kind == 2 ? 52px : 8px;
+            padding-right: 12px;
+            spacing: 10px;
+
+            Rectangle {
+                width: 22px;
+                if root.item.expandable: Rectangle {
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 11px;
+                    background: chev.has-hover ? Theme.hover : transparent;
+                    Icon {
+                        glyph: root.item.expanded ? Icons.chevron-down : Icons.chevron-right;
+                        size: 14px;
+                        tint: Theme.text-2;
+                    }
+                    chev := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.toggle(); }
+                    }
+                }
+            }
+            if root.item.kind == 1: VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: root.item.initials;
+                    tone: Theme.badges[root.item.tone];
+                    size: 28px;
+                }
+            }
+            Cell {
+                text: root.item.name;
+                font-weight: root.item.kind == 1 ? 500 : 400;
+                horizontal-stretch: 1;
+            }
+            Cell {
+                text: root.item.count;
+                color: Theme.text-2;
+                font-family: Theme.mono;
+                font-size: 12px;
+            }
+        }
+        Cell {
+            width: Cols.status;
+            text: root.item.status;
+            color: Theme.text-2;
+        }
+        HeatCell { width: Cols.num; text: root.item.cpu; heat: root.item.cpu-heat; }
+        HeatCell { width: Cols.num; text: root.item.mem; heat: root.item.mem-heat; }
+        HeatCell { width: Cols.num; text: root.item.disk; heat: root.item.disk-heat; }
+    }
+}
+
+export component ProcessesPage inherits Card {
+    in property <[ProcRow]> rows;
+    in property <ProcTotals> totals;
+    in property <string> sort-column;
+    in property <bool> ascending;
+    in-out property <string> filter;
+    in-out property <string> selected-key;
+    callback sort(string);
+    callback toggle(string);
+    callback filter-edited(string);
+
+    VerticalLayout {
+        padding: 20px;
+        padding-bottom: 8px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 16px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text { text: "Processes"; font-size: 22px; font-weight: 500; color: Theme.text; }
+                Text { text: root.totals.count; font-size: 12px; color: Theme.text-2; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                SearchField {
+                    width: 360px;
+                    text <=> root.filter;
+                    edited(t) => { root.filter-edited(t); }
+                }
+            }
+        }
+
+        // Column headers
+        HorizontalLayout {
+            height: 48px;
+            spacing: 0px;
+            HeaderCell {
+                horizontal-stretch: 1;
+                title: "Name";
+                column: "name";
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+            HeaderCell {
+                width: Cols.status;
+                title: "Status";
+                column: "status";
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+            HeaderCell {
+                width: Cols.num;
+                title: "CPU";
+                total: root.totals.cpu;
+                column: "cpu";
+                numeric: true;
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+            HeaderCell {
+                width: Cols.num;
+                title: "Memory";
+                total: root.totals.mem;
+                column: "mem";
+                numeric: true;
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+            HeaderCell {
+                width: Cols.num;
+                title: "Disk";
+                total: root.totals.disk;
+                column: "disk";
+                numeric: true;
+                sort-column: root.sort-column;
+                ascending: root.ascending;
+                sort(c) => { root.sort(c); }
+            }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+
+        ListView {
+            vertical-stretch: 1;
+            for row in root.rows: Row {
+                item: row;
+                selected: row.key == root.selected-key;
+                select => { root.selected-key = row.key; }
+                toggle => { root.toggle(row.key); }
+            }
+        }
+    }
+}

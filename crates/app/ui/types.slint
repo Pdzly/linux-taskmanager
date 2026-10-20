@@ -49,3 +49,45 @@ export struct SysView {
     load1: string,
     load-detail: string,
 }
+
+// One line of the Processes table.
+export struct ProcRow {
+    // 0 = section header, 1 = app/process (top level), 2 = process inside an expanded group
+    kind: int,
+    key: string,
+    name: string,
+    // "(4)" when the row groups several processes
+    count: string,
+    initials: string,
+    tone: int,
+    expandable: bool,
+    expanded: bool,
+    status: string,
+    cpu: string,
+    cpu-heat: float,
+    mem: string,
+    mem-heat: float,
+    disk: string,
+    disk-heat: float,
+}
+
+// Column header figures (machine totals) for the Processes table.
+export struct ProcTotals {
+    count: string,
+    cpu: string,
+    mem: string,
+    disk: string,
+}
+
+export struct DetailRow {
+    key: string,
+    name: string,
+    pid: string,
+    status: string,
+    user: string,
+    cpu: string,
+    mem: string,
+    threads: string,
+    nice: string,
+    cmd: string,
+}

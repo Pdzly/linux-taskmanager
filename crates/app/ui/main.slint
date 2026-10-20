@@ -7,12 +7,14 @@ import "../fonts/MonaSansMono-Medium.ttf";
 import "../fonts/lucide-subset.ttf";
 
 import { Theme, Page } from "theme.slint";
-import { Summary, CpuView, MemView, DeviceView, SysView, Metric } from "types.slint";
-export { Theme, Summary, CpuView, MemView, DeviceView, SysView, Metric }
+import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow } from "types.slint";
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
 import { PlaceholderPage } from "pages/placeholder.slint";
+import { ProcessesPage } from "pages/processes.slint";
+import { DetailsPage } from "pages/details.slint";
 
 export component MainWindow inherits Window {
     title: "TaskMonitor";
@@ -34,9 +36,20 @@ export component MainWindow inherits Window {
     in property <[float]> core-load;
     in property <[DeviceView]> disks;
     in property <[DeviceView]> nets;
+    in property <[ProcRow]> proc-rows;
+    in property <[DetailRow]> detail-rows;
+    in property <ProcTotals> proc-totals;
+    in property <string> sort-column: "name";
+    in property <bool> sort-ascending: true;
+    in-out property <string> filter;
+    in-out property <string> selected-key;
     in-out property <Page> page: Page.performance;
     callback run-command(string);
     callback refresh-changed(int);
+    callback page-changed(Page);
+    callback sort(string);
+    callback toggle(string);
+    callback filter-changed(string);
 
     VerticalLayout {
         padding: 20px;
@@ -60,7 +73,10 @@ export component MainWindow inherits Window {
             spacing: 20px;
             Rail {
                 current: root.page;
-                selected(p) => { root.page = p; }
+                selected(p) => {
+                    root.page = p;
+                    root.page-changed(p);
+                }
             }
 
             if root.page == Page.performance: PerformancePage {
@@ -75,11 +91,30 @@ export component MainWindow inherits Window {
                 nets: root.nets;
                 run-command(cmd) => { root.run-command(cmd); }
             }
-            if root.page == Page.processes: PlaceholderPage { title: "Processes"; note: "Apps and background processes arrive in M2."; }
+            if root.page == Page.processes: ProcessesPage {
+                rows: root.proc-rows;
+                totals: root.proc-totals;
+                sort-column: root.sort-column;
+                ascending: root.sort-ascending;
+                filter <=> root.filter;
+                selected-key <=> root.selected-key;
+                sort(c) => { root.sort(c); }
+                toggle(k) => { root.toggle(k); }
+                filter-edited(t) => { root.filter-changed(t); }
+            }
             if root.page == Page.history: PlaceholderPage { title: "App history"; note: "Per-app resource history arrives in M6."; }
             if root.page == Page.startup: PlaceholderPage { title: "Startup apps"; note: "Autostart entries arrive in M5."; }
             if root.page == Page.users: PlaceholderPage { title: "Users"; note: "Sessions and per-user usage arrive in M5."; }
-            if root.page == Page.details: PlaceholderPage { title: "Details"; note: "The full process table arrives in M2."; }
+            if root.page == Page.details: DetailsPage {
+                rows: root.detail-rows;
+                totals: root.proc-totals;
+                sort-column: root.sort-column;
+                ascending: root.sort-ascending;
+                filter <=> root.filter;
+                selected-key <=> root.selected-key;
+                sort(c) => { root.sort(c); }
+                filter-edited(t) => { root.filter-changed(t); }
+            }
             if root.page == Page.services: PlaceholderPage { title: "Services"; note: "systemd units arrive in M5."; }
             if root.page == Page.settings: PlaceholderPage { title: "Settings"; note: "Theme, refresh rate and defaults arrive in M6."; }
         }

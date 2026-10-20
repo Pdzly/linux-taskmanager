@@ -1,0 +1,113 @@
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { Card } from "../components.slint";
+import { SearchField, HeaderCell, Cell } from "../table.slint";
+import { DetailRow, ProcTotals } from "../types.slint";
+
+// Every process, kernel threads included, one row each (Windows' Details tab).
+global DCols {
+    out property <length> name: 220px;
+    out property <length> pid: 84px;
+    out property <length> status: 120px;
+    out property <length> user: 110px;
+    out property <length> cpu: 72px;
+    out property <length> mem: 100px;
+    out property <length> threads: 84px;
+    out property <length> nice: 64px;
+}
+
+component DRow inherits Rectangle {
+    in property <DetailRow> item;
+    in property <bool> selected;
+    callback select();
+
+    height: 36px;
+    border-radius: 10px;
+    background: selected ? Theme.tile : ta.has-hover ? Theme.tile.with-alpha(0.5) : transparent;
+
+    ta := TouchArea {
+        clicked => { root.select(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 0px;
+        Cell { width: DCols.name; text: root.item.name; font-weight: 500; }
+        Cell { width: DCols.pid; text: root.item.pid; font-family: Theme.mono; horizontal-alignment: right; }
+        Rectangle { width: 24px; }
+        Cell { width: DCols.status; text: root.item.status; color: Theme.text-2; }
+        Cell { width: DCols.user; text: root.item.user; color: Theme.text-2; }
+        Cell { width: DCols.cpu; text: root.item.cpu; font-family: Theme.mono; horizontal-alignment: right; }
+        Cell { width: DCols.mem; text: root.item.mem; font-family: Theme.mono; horizontal-alignment: right; }
+        Cell { width: DCols.threads; text: root.item.threads; font-family: Theme.mono; horizontal-alignment: right; }
+        Cell { width: DCols.nice; text: root.item.nice; font-family: Theme.mono; horizontal-alignment: right; }
+        Rectangle { width: 24px; }
+        Cell { horizontal-stretch: 1; text: root.item.cmd; color: Theme.text-2; font-family: Theme.mono; font-size: 12px; }
+    }
+}
+
+export component DetailsPage inherits Card {
+    in property <[DetailRow]> rows;
+    in property <ProcTotals> totals;
+    in property <string> sort-column;
+    in property <bool> ascending;
+    in-out property <string> filter;
+    in-out property <string> selected-key;
+    callback sort(string);
+    callback filter-edited(string);
+
+    VerticalLayout {
+        padding: 20px;
+        padding-bottom: 8px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 16px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text { text: "Details"; font-size: 22px; font-weight: 500; color: Theme.text; }
+                Text { text: root.totals.count + ", kernel threads included"; font-size: 12px; color: Theme.text-2; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                SearchField {
+                    width: 360px;
+                    text <=> root.filter;
+                    edited(t) => { root.filter-edited(t); }
+                }
+            }
+        }
+
+        // Same paddings and widths as DRow, so headers line up with their columns.
+        HorizontalLayout {
+            height: 40px;
+            padding-left: 12px;
+            padding-right: 12px;
+            spacing: 0px;
+            HeaderCell { width: DCols.name; inset: 0px; title: "Name"; column: "name"; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.pid; inset: 0px; title: "PID"; column: "pid"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            Rectangle { width: 24px; }
+            HeaderCell { width: DCols.status; inset: 0px; title: "Status"; column: "status"; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.user; inset: 0px; title: "User"; column: "user"; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.cpu; inset: 0px; title: "CPU %"; column: "cpu"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.mem; inset: 0px; title: "Memory"; column: "mem"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.threads; inset: 0px; title: "Threads"; column: "threads"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.nice; inset: 0px; title: "Nice"; column: "nice"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            Rectangle { width: 24px; }
+            HeaderCell { horizontal-stretch: 1; inset: 0px; title: "Command line"; column: "cmd"; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+
+        ListView {
+            vertical-stretch: 1;
+            for row in root.rows: DRow {
+                item: row;
+                selected: row.key == root.selected-key;
+                select => { root.selected-key = row.key; }
+            }
+        }
+    }
+}

@@ -196,16 +196,23 @@ pub fn apply(ui: &MainWindow, u: Update) {
     sync(ui.get_nets(), u.nets.into_iter().map(Device::into_view).collect(), |m| ui.set_nets(m));
 }
 
-/// Updates rows in place when the row count is unchanged; replaces the model otherwise.
-fn sync<T: Clone + PartialEq + 'static>(model: ModelRc<T>, rows: Vec<T>, set: impl FnOnce(ModelRc<T>)) {
-    if model.row_count() != rows.len() {
+/// Updates a model in place: changed rows are replaced, extra rows pushed or removed
+/// at the end. Keeping the same model keeps list scroll position and selection.
+pub fn sync<T: Clone + PartialEq + 'static>(model: ModelRc<T>, rows: Vec<T>, set: impl FnOnce(ModelRc<T>)) {
+    let Some(vec) = model.as_any().downcast_ref::<VecModel<T>>() else {
         set(ModelRc::new(VecModel::from(rows)));
         return;
-    }
+    };
+    let n = rows.len();
     for (i, row) in rows.into_iter().enumerate() {
-        if model.row_data(i).as_ref() != Some(&row) {
-            model.set_row_data(i, row);
+        if i >= vec.row_count() {
+            vec.push(row);
+        } else if vec.row_data(i).as_ref() != Some(&row) {
+            vec.set_row_data(i, row);
         }
+    }
+    while vec.row_count() > n {
+        vec.remove(vec.row_count() - 1);
     }
 }
 
