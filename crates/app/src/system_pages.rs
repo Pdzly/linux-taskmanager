@@ -2,13 +2,14 @@
 
 use std::collections::HashMap;
 
+use taskmonitor_core::app_usage::AppUsageLog;
 use taskmonitor_core::services::Service;
 use taskmonitor_core::startup::StartupEntry;
 use taskmonitor_core::users::Session;
 use taskmonitor_core::{Process, Snapshot};
 
 use crate::processes::{initials, mem_text, tone};
-use crate::{ServiceRow, StartupRow, UserRow};
+use crate::{HistoryRow, ServiceRow, StartupRow, UserRow};
 
 pub fn service_rows(services: &[Service], filter: &str) -> (Vec<ServiceRow>, String) {
     let filter = filter.to_lowercase();
@@ -102,4 +103,42 @@ pub fn user_rows(sessions: &[Session], procs: &[Process], snap: &Snapshot) -> Ve
             }
         })
         .collect()
+}
+
+/// Apps by CPU time, most first.
+pub fn history_rows(log: &AppUsageLog) -> Vec<HistoryRow> {
+    let mut apps: Vec<_> = log.apps.values().collect();
+    apps.sort_by(|a, b| b.cpu_secs.total_cmp(&a.cpu_secs));
+    let max = apps.first().map_or(1.0, |a| a.cpu_secs.max(1.0));
+    let duration = |secs: f64| {
+        let s = secs as u64;
+        format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
+    };
+    apps.into_iter()
+        .map(|a| HistoryRow {
+            name: a.name.as_str().into(),
+            initials: initials(&a.name).into(),
+            tone: tone(&a.name),
+            cpu: duration(a.cpu_secs).into(),
+            cpu_heat: (a.cpu_secs / max) as f32,
+            read: mem_text(a.read_bytes as u64).into(),
+            write: mem_text(a.write_bytes as u64).into(),
+            gpu: duration(a.gpu_secs).into(),
+        })
+        .collect()
+}
+
+/// "in the last 3 hours", relative to when tracking started.
+pub fn since_text(since: u64) -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let ago = now.saturating_sub(since);
+    let (n, unit) = match ago {
+        0..3600 => (ago / 60, "minute"),
+        3600..86_400 => (ago / 3600, "hour"),
+        _ => (ago / 86_400, "day"),
+    };
+    match n.max(1) {
+        1 => format!("in the last {unit}"),
+        n => format!("in the last {n} {unit}s"),
+    }
 }

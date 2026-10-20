@@ -7,18 +7,20 @@ import "../fonts/MonaSansMono-Medium.ttf";
 import "../fonts/lucide-subset.ttf";
 
 import { Theme, Page } from "theme.slint";
-import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow } from "types.slint";
-export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow }
+import { Palette } from "std-widgets.slint";
+import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow } from "types.slint";
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
-import { PlaceholderPage } from "pages/placeholder.slint";
 import { ProcessesPage } from "pages/processes.slint";
 import { DetailsPage } from "pages/details.slint";
 import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast } from "dialogs.slint";
 import { ServicesPage } from "pages/services.slint";
 import { StartupPage } from "pages/startup.slint";
 import { UsersPage } from "pages/users.slint";
+import { HistoryPage } from "pages/history.slint";
+import { SettingsPage } from "pages/settings.slint";
 
 export component MainWindow inherits Window {
     title: "TaskMonitor";
@@ -69,6 +71,21 @@ export component MainWindow inherits Window {
     callback startup-toggled(string, bool);
     callback session-act(string, string);
 
+    // App history and settings
+    in property <[HistoryRow]> history-rows;
+    in property <string> history-since;
+    in-out property <int> theme-choice;
+    changed theme-choice => {
+        Theme.dark = self.theme-choice == 2 || (self.theme-choice == 0 && Palette.color-scheme == ColorScheme.dark);
+    }
+    in-out property <int> refresh-index: 1;
+    in-out property <int> start-page;
+    in-out property <bool> app-history;
+    callback settings-changed();
+    callback clear-history();
+    in-out property <bool> on-top;
+    always-on-top: root.on-top;
+
     // Process actions
     in-out property <string> toast;
     in property <string> props-title;
@@ -86,6 +103,11 @@ export component MainWindow inherits Window {
     callback affinity-all();
     callback affinity-apply(string);
 
+    function go(p: Page) {
+        root.page = p;
+        root.page-changed(p);
+    }
+
     // Kill and End process tree can lose work, so they ask first.
     function request(action: string, key: string) {
         if action == "kill" || action == "tree" || action == "terminate" {
@@ -96,121 +118,170 @@ export component MainWindow inherits Window {
         }
     }
 
-    VerticalLayout {
-        padding: 20px;
-        spacing: 20px;
-
-        HorizontalLayout {
-            spacing: 20px;
-            VerticalLayout {
-                alignment: center;
-                Logo { size: 52px; }
+    // Keyboard shortcuts. Text fields get keys first, so typing is unaffected.
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.modifiers.control {
+                if event.text == "1" { root.go(Page.processes); return accept; }
+                if event.text == "2" { root.go(Page.performance); return accept; }
+                if event.text == "3" { root.go(Page.history); return accept; }
+                if event.text == "4" { root.go(Page.startup); return accept; }
+                if event.text == "5" { root.go(Page.users); return accept; }
+                if event.text == "6" { root.go(Page.details); return accept; }
+                if event.text == "7" { root.go(Page.services); return accept; }
             }
-            TopBar {
-                user-name: root.user-name;
-                user-initials: root.user-initials;
-                summary: root.summary;
-                refresh-changed(i) => { root.refresh-changed(i); }
+            if event.text == Key.Escape {
+                root.confirm-action = "";
+                root.props-open = false;
+                root.affinity-open = false;
+                return accept;
             }
+            if event.text == Key.Delete && root.selected-key != "" && (root.page == Page.processes || root.page == Page.details) {
+                root.request("end", root.selected-key);
+                return accept;
+            }
+            reject
         }
 
-        HorizontalLayout {
+        VerticalLayout {
+            padding: 20px;
             spacing: 20px;
-            Rail {
-                current: root.page;
-                selected(p) => {
-                    root.page = p;
-                    root.page-changed(p);
+
+            HorizontalLayout {
+                spacing: 20px;
+                VerticalLayout {
+                    alignment: center;
+                    Logo { size: 52px; }
                 }
-                end-task => {
-                    if root.selected-key != "" && (root.page == Page.processes || root.page == Page.details) {
-                        root.request("end", root.selected-key);
-                    } else {
-                        root.toast = "Select a process on the Processes or Details page first";
-                    }
+                TopBar {
+                    refresh-index <=> root.refresh-index;
+                    user-name: root.user-name;
+                    user-initials: root.user-initials;
+                    summary: root.summary;
+                    refresh-changed(i) => { root.refresh-changed(i); }
+                // The quick toggle picks an explicit theme and remembers it.
+                theme-toggled => {
+                    root.theme-choice = Theme.dark ? 1 : 2;
+                    root.settings-changed();
+                }
                 }
             }
 
-            if root.page == Page.performance: PerformancePage {
-                user-name: root.user-name;
-                user-initials: root.user-initials;
-                uptime: root.summary.uptime;
-                cpu: root.cpu;
-                mem: root.mem;
-                sys: root.sys;
-                core-load: root.core-load;
-                disks: root.disks;
-                nets: root.nets;
-                gpus: root.gpus;
-                tab <=> root.perf-tab;
-                tab-changed(t) => { root.perf-tab-changed(t); }
-                open-users => {
-                    root.page = Page.users;
-                    root.page-changed(Page.users);
-                }
-                run-command(cmd) => { root.run-command(cmd); }
-            }
-            if root.page == Page.processes: ProcessesPage {
-                rows: root.proc-rows;
-                totals: root.proc-totals;
-                sort-column: root.sort-column;
-                ascending: root.sort-ascending;
-                filter <=> root.filter;
-                selected-key <=> root.selected-key;
-                sort(c) => { root.sort(c); }
-                toggle(k) => { root.toggle(k); }
-                filter-edited(t) => { root.filter-changed(t); }
-                request(a, k) => { root.request(a, k); }
-                properties(k) => { root.properties(k); }
-                affinity(k) => {
-                    root.affinity-key = k;
-                    root.affinity-query(k);
-                }
-            }
-            if root.page == Page.history: PlaceholderPage { title: "App history"; note: "Per-app resource history arrives in M6."; }
-            if root.page == Page.startup: StartupPage {
-                rows: root.startup-rows;
-                toggled(id, on) => { root.startup-toggled(id, on); }
-            }
-            if root.page == Page.users: UsersPage {
-                rows: root.user-rows;
-                act(verb, key) => {
-                    if verb == "terminate" {
-                        root.request(verb, key);
-                    } else {
-                        root.session-act(verb, key);
+            HorizontalLayout {
+                spacing: 20px;
+                Rail {
+                    current: root.page;
+                    selected(p) => {
+                        root.page = p;
+                        root.page-changed(p);
+                    }
+                    end-task => {
+                        if root.selected-key != "" && (root.page == Page.processes || root.page == Page.details) {
+                            root.request("end", root.selected-key);
+                        } else {
+                            root.toast = "Select a process on the Processes or Details page first";
+                        }
                     }
                 }
-            }
-            if root.page == Page.details: DetailsPage {
-                rows: root.detail-rows;
-                totals: root.proc-totals;
-                sort-column: root.sort-column;
-                ascending: root.sort-ascending;
-                filter <=> root.filter;
-                selected-key <=> root.selected-key;
-                sort(c) => { root.sort(c); }
-                filter-edited(t) => { root.filter-changed(t); }
-                request(a, k) => { root.request(a, k); }
-                properties(k) => { root.properties(k); }
-                affinity(k) => {
-                    root.affinity-key = k;
-                    root.affinity-query(k);
+
+                if root.page == Page.performance: PerformancePage {
+                    user-name: root.user-name;
+                    user-initials: root.user-initials;
+                    uptime: root.summary.uptime;
+                    cpu: root.cpu;
+                    mem: root.mem;
+                    sys: root.sys;
+                    core-load: root.core-load;
+                    disks: root.disks;
+                    nets: root.nets;
+                    gpus: root.gpus;
+                    tab <=> root.perf-tab;
+                    tab-changed(t) => { root.perf-tab-changed(t); }
+                    open-users => {
+                        root.page = Page.users;
+                        root.page-changed(Page.users);
+                    }
+                    run-command(cmd) => { root.run-command(cmd); }
+                }
+                if root.page == Page.processes: ProcessesPage {
+                    rows: root.proc-rows;
+                    totals: root.proc-totals;
+                    sort-column: root.sort-column;
+                    ascending: root.sort-ascending;
+                    filter <=> root.filter;
+                    selected-key <=> root.selected-key;
+                    sort(c) => { root.sort(c); }
+                    toggle(k) => { root.toggle(k); }
+                    filter-edited(t) => { root.filter-changed(t); }
+                    request(a, k) => { root.request(a, k); }
+                    properties(k) => { root.properties(k); }
+                    affinity(k) => {
+                        root.affinity-key = k;
+                        root.affinity-query(k);
+                    }
+                }
+                if root.page == Page.history: HistoryPage {
+                    rows: root.history-rows;
+                    enabled: root.app-history;
+                    since: root.history-since;
+                    enable => {
+                        root.app-history = true;
+                        root.settings-changed();
+                    }
+                    clear => { root.clear-history(); }
+                }
+                if root.page == Page.startup: StartupPage {
+                    rows: root.startup-rows;
+                    toggled(id, on) => { root.startup-toggled(id, on); }
+                }
+                if root.page == Page.users: UsersPage {
+                    rows: root.user-rows;
+                    act(verb, key) => {
+                        if verb == "terminate" {
+                            root.request(verb, key);
+                        } else {
+                            root.session-act(verb, key);
+                        }
+                    }
+                }
+                if root.page == Page.details: DetailsPage {
+                    rows: root.detail-rows;
+                    totals: root.proc-totals;
+                    sort-column: root.sort-column;
+                    ascending: root.sort-ascending;
+                    filter <=> root.filter;
+                    selected-key <=> root.selected-key;
+                    sort(c) => { root.sort(c); }
+                    filter-edited(t) => { root.filter-changed(t); }
+                    request(a, k) => { root.request(a, k); }
+                    properties(k) => { root.properties(k); }
+                    affinity(k) => {
+                        root.affinity-key = k;
+                        root.affinity-query(k);
+                    }
+                }
+                if root.page == Page.services: ServicesPage {
+                    rows: root.service-rows;
+                    summary: root.service-summary;
+                    user-bus: root.service-user-bus;
+                    filter <=> root.filter;
+                    filter-edited(t) => { root.filter-changed(t); }
+                    bus-changed(user) => {
+                        root.service-user-bus = user;
+                        root.service-bus-changed(user);
+                    }
+                    act(verb, name) => { root.service-act(verb, name); }
+                }
+                if root.page == Page.settings: SettingsPage {
+                    theme <=> root.theme-choice;
+                    refresh-index <=> root.refresh-index;
+                    start-page <=> root.start-page;
+                    always-on-top <=> root.on-top;
+                    app-history <=> root.app-history;
+                    changed => { root.settings-changed(); }
                 }
             }
-            if root.page == Page.services: ServicesPage {
-                rows: root.service-rows;
-                summary: root.service-summary;
-                user-bus: root.service-user-bus;
-                filter <=> root.filter;
-                filter-edited(t) => { root.filter-changed(t); }
-                bus-changed(user) => {
-                    root.service-user-bus = user;
-                    root.service-bus-changed(user);
-                }
-                act(verb, name) => { root.service-act(verb, name); }
-            }
-            if root.page == Page.settings: PlaceholderPage { title: "Settings"; note: "Theme, refresh rate and defaults arrive in M6."; }
         }
     }
 

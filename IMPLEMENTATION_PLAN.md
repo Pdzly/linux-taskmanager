@@ -186,7 +186,9 @@ Result: Services lists system and user units (405 here) with status, startup typ
 - Autostart `.desktop` plus `systemd --user` toggles; startup impact from `systemd-analyze` data where available.
 - logind sessions with per-UID aggregation, plus log off/terminate session.
 
-### M6: App history + polish (3 days)
+### M6: App history + polish (3 days) ✅ done
+Result: opt-in App history (CPU time, disk read/written, GPU time per app) in ~/.local/share/taskmonitor/app-history.tsv, saved every 60 s and on exit; Settings page (theme, update speed, start page, always on top — X11 only, app history) in ~/.config/taskmonitor/config; Ctrl+1–7, Delete, Esc shortcuts. Binary 19.5 MB.
+
 - Opt-in SQLite aggregates every 60 s, pruned after 30 days.
 - Settings (theme, refresh rate, default page, always on top), keyboard shortcuts, accessibility labels, empty and error states, and a "requires root" hint for network bandwidth.
 

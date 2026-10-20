@@ -3,12 +3,14 @@ mod bench;
 mod bridge;
 mod format;
 mod processes;
+mod settings;
 mod system_pages;
 
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
 use slint::{Model, ModelRc, SharedString, VecModel};
+use taskmonitor_core::app_usage::{self, AppUsageLog};
 use taskmonitor_core::services::{Bus, Service, Services};
 use taskmonitor_core::users::{Logind, Session};
 use taskmonitor_core::{GpuSampler, Process, ProcessSampler, Sampler, Snapshot};
@@ -30,13 +32,51 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_user_name(user.into());
     ui.set_user_initials(initials.into());
 
-    let tx = spawn_sampler(ui.as_weak());
+    let (tx, sampler_thread) = spawn_sampler(ui.as_weak());
+    let quit = tx.clone();
     let send = move |cmd| {
         let _ = tx.send(cmd);
     };
+
+    // Settings: theme, refresh rate, start page, always on top, app history.
+    let prefs = settings::Settings::load();
+    ui.set_theme_choice(prefs.theme);
+    ui.set_refresh_index(prefs.refresh);
+    ui.set_on_top(prefs.always_on_top);
+    ui.set_app_history(prefs.app_history);
+    let start = match prefs.start_page.as_str() {
+        "performance" => (1, Page::Performance),
+        "details" => (2, Page::Details),
+        _ => (0, Page::Processes),
+    };
+    ui.set_start_page(start.0);
+    ui.set_page(start.1);
+    send(Cmd::Page(start.1));
+    if prefs.refresh != settings::Settings::default().refresh {
+        send(Cmd::Interval(INTERVALS_MS[prefs.refresh as usize]));
+    }
+    send(Cmd::History(prefs.app_history));
+    ui.on_settings_changed({
+        let send = send.clone();
+        let ui = ui.as_weak();
+        move || {
+            let ui = ui.unwrap();
+            save_settings(&ui);
+            send(Cmd::Interval(INTERVALS_MS.get(ui.get_refresh_index() as usize).copied().unwrap_or(1000)));
+            send(Cmd::History(ui.get_app_history()));
+        }
+    });
+    ui.on_clear_history({
+        let send = send.clone();
+        move || send(Cmd::ClearHistory)
+    });
     ui.on_refresh_changed({
         let send = send.clone();
-        move |i| send(Cmd::Interval(INTERVALS_MS.get(i as usize).copied().unwrap_or(1000)))
+        let ui = ui.as_weak();
+        move |i| {
+            save_settings(&ui.unwrap());
+            send(Cmd::Interval(INTERVALS_MS.get(i as usize).copied().unwrap_or(1000)))
+        }
     });
     ui.on_page_changed({
         let send = send.clone();
@@ -126,6 +166,8 @@ fn main() -> Result<(), slint::PlatformError> {
             "services" => Page::Services,
             "startup" => Page::Startup,
             "users" => Page::Users,
+            "history" => Page::History,
+            "settings" => Page::Settings,
             _ => Page::Performance,
         };
         ui.set_page(page);
@@ -165,7 +207,24 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    ui.run()
+    ui.run()?;
+    // Let the sampler save app history before the process exits.
+    let _ = quit.send(Cmd::Quit);
+    let _ = sampler_thread.join();
+    Ok(())
+}
+
+fn save_settings(ui: &MainWindow) {
+    let prefs = settings::Settings {
+        theme: ui.get_theme_choice(),
+        refresh: ui.get_refresh_index(),
+        start_page: ["processes", "performance", "details"][ui.get_start_page().clamp(0, 2) as usize].into(),
+        always_on_top: ui.get_on_top(),
+        app_history: ui.get_app_history(),
+    };
+    if let Err(e) = prefs.save() {
+        ui.set_toast(format!("Couldn't save settings: {e}").into());
+    }
 }
 
 /// Messages from the UI to the sampler thread.
@@ -191,14 +250,17 @@ enum Cmd {
     StartupToggle(SharedString, bool),
     /// (lock|terminate, session id)
     SessionAct(SharedString, SharedString),
+    History(bool),
+    ClearHistory,
+    Quit,
 }
 
 /// Samples on a background thread and pushes updates into the UI.
 /// Per-process data is only collected while a page that shows it is open.
-fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
+fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread::JoinHandle<()>) {
     let (tx, rx) = mpsc::channel::<Cmd>();
     let tx_back = tx.clone();
-    std::thread::Builder::new()
+    let handle = std::thread::Builder::new()
         .name("sampler".into())
         .spawn(move || {
             let mut sampler = Sampler::new();
@@ -214,6 +276,11 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
             let mut service_bus = Bus::System;
             let mut service_list: Vec<Service> = Vec::new();
             let mut logind: Option<Logind> = None;
+            let history_path = app_usage::default_path();
+            let mut usage_log: Option<AppUsageLog> = None;
+            let mut last_save = std::time::Instant::now();
+            let mut tick: u64 = 0;
+            let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
             let mut interval = Some(Duration::from_millis(1000));
             // The first tick comes quickly so the window doesn't sit on placeholders.
             let mut wait = Some(Duration::from_millis(250));
@@ -309,6 +376,30 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                                 session_action(&ui, &verb, &key);
                                 continue;
                             }
+                            Cmd::History(on) => {
+                                if on && usage_log.is_none() {
+                                    usage_log = Some(AppUsageLog::load(&history_path));
+                                } else if !on && let Some(log) = usage_log.take() {
+                                    let _ = log.save(&history_path);
+                                }
+                                push_history(&ui, usage_log.as_ref());
+                                continue;
+                            }
+                            Cmd::ClearHistory => {
+                                if usage_log.is_some() {
+                                    let log = AppUsageLog::default();
+                                    let _ = log.save(&history_path);
+                                    usage_log = Some(log);
+                                }
+                                push_history(&ui, usage_log.as_ref());
+                                continue;
+                            }
+                            Cmd::Quit => {
+                                if let Some(log) = &usage_log {
+                                    let _ = log.save(&history_path);
+                                }
+                                break;
+                            }
                             Cmd::Toggle(k) => view.toggle(k),
                             Cmd::Action(a, k) => {
                                 run_action(&ui, &a, &k, last.1.clone());
@@ -343,14 +434,31 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
                     break; // window closed
                 }
                 last.0 = snap;
-                if shows_procs(page) {
-                    last.1 = procs_sampler.get_or_insert_with(ProcessSampler::new).sample();
+                tick += 1;
+                // App history needs process samples even when no process page is open,
+                // but every 5th tick is enough: it accumulates rates times elapsed time.
+                let sample_procs = shows_procs(page) || (usage_log.is_some() && tick.is_multiple_of(5));
+                if sample_procs {
+                    let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
+                    last.1 = ps.sample();
                     for p in &mut last.1 {
                         p.gpu = gpu_per_pid.get(&p.pid).copied().unwrap_or(0.0);
                     }
-                    if !push_rows(&view, page, &last, gpu_total) {
-                        break;
+                    if let Some(log) = usage_log.as_mut() {
+                        log.record(&last.1, ps.last_interval, cpus);
                     }
+                }
+                if let Some(log) = &usage_log
+                    && last_save.elapsed() > Duration::from_secs(60)
+                {
+                    let _ = log.save(&history_path);
+                    last_save = std::time::Instant::now();
+                }
+                if page == Page::History {
+                    push_history(&ui, usage_log.as_ref());
+                }
+                if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
+                    break;
                 }
                 if page == Page::Services {
                     let svc = services.get_or_insert_with(Services::new);
@@ -364,7 +472,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> mpsc::Sender<Cmd> {
             }
         })
         .expect("spawn sampler thread");
-    tx
+    (tx, handle)
 }
 
 /// Runs an action on its own thread: a polkit password prompt may block for a while.
@@ -468,4 +576,12 @@ fn dbus_error(e: &zbus::Error) -> String {
         zbus::Error::MethodError(_, Some(detail), _) => detail.clone(),
         other => other.to_string(),
     }
+}
+
+fn push_history(ui: &slint::Weak<MainWindow>, log: Option<&AppUsageLog>) {
+    let (rows, since) = log.map_or_else(Default::default, |l| (system_pages::history_rows(l), system_pages::since_text(l.since)));
+    let _ = ui.upgrade_in_event_loop(move |ui| {
+        bridge::sync(ui.get_history_rows(), rows, |m| ui.set_history_rows(m));
+        ui.set_history_since(since.into());
+    });
 }

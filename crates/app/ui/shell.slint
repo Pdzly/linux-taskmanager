@@ -63,6 +63,7 @@ export component TopBar inherits HorizontalLayout {
     // Refresh rate: index into `refresh-labels`; Rust maps it to an interval.
     in-out property <int> refresh-index: 1;
     callback refresh-changed(int);
+    callback theme-toggled();
     property <[string]> refresh-labels: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
 
     height: 60px;
@@ -143,7 +144,7 @@ export component TopBar inherits HorizontalLayout {
             icon: Theme.dark ? Icons.sun : Icons.moon;
             label: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
             size: 48px;
-            clicked => { Theme.dark = !Theme.dark; }
+            clicked => { root.theme-toggled(); }
         }
     }
 

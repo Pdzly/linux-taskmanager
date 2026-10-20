@@ -130,6 +130,8 @@ struct Entry {
 /// Samples every process. Static facts (name, cmdline, owner, app) are read once
 /// per process and reused until the PID is recycled.
 pub struct ProcessSampler {
+    /// Seconds covered by the last `sample()` (its rates are averages over this span).
+    pub last_interval: f64,
     buf: String,
     path: String,
     last: Instant,
@@ -153,6 +155,7 @@ impl ProcessSampler {
         use nix::unistd::{SysconfVar, sysconf};
         let conf = |v, default| sysconf(v).ok().flatten().map_or(default, |n| n as u64);
         Self {
+            last_interval: 0.0,
             buf: String::with_capacity(4096),
             path: String::with_capacity(32),
             last: Instant::now(),
@@ -170,6 +173,7 @@ impl ProcessSampler {
         let now = Instant::now();
         let secs = now.duration_since(self.last).as_secs_f64();
         self.last = now;
+        self.last_interval = secs;
         let capacity = secs * self.clk_tck * self.cpus as f64;
 
         let mut out = Vec::with_capacity(self.entries.len() + 16);

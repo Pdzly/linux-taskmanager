@@ -4,6 +4,7 @@
 //! [`Sampler`] does the file reading and turns counters into rates.
 
 pub mod actions;
+pub mod app_usage;
 pub mod apps;
 pub mod cpu;
 pub mod disk;

@@ -1,0 +1,127 @@
+import { Theme } from "../theme.slint";
+import { Card, Chip, Switch } from "../components.slint";
+
+component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <string> note;
+    spacing: 10px;
+    VerticalLayout {
+        spacing: 2px;
+        Text { text: root.title; font-size: 15px; font-weight: 500; color: Theme.text; }
+        if root.note != "": Text { text: root.note; font-size: 12px; color: Theme.text-2; wrap: word-wrap; }
+    }
+    @children
+}
+
+component Choice inherits HorizontalLayout {
+    in property <[string]> options;
+    in property <int> current;
+    callback picked(int);
+    spacing: 8px;
+    alignment: start;
+    for label[i] in root.options: Chip {
+        text: label;
+        clickable: true;
+        selected: i == root.current;
+        clicked => { root.picked(i); }
+    }
+}
+
+component Toggle inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> note;
+    in property <bool> on;
+    callback toggled();
+    spacing: 16px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        spacing: 2px;
+        Text { text: root.text; font-size: 15px; font-weight: 500; color: Theme.text; }
+        Text { text: root.note; font-size: 12px; color: Theme.text-2; wrap: word-wrap; }
+    }
+    VerticalLayout {
+        alignment: center;
+        Switch { on: root.on; label: root.text; toggled => { root.toggled(); } }
+    }
+}
+
+export component SettingsPage inherits Card {
+    // 0 desktop, 1 light, 2 dark
+    in-out property <int> theme;
+    in-out property <int> refresh-index;
+    in-out property <int> start-page;
+    in-out property <bool> always-on-top;
+    in-out property <bool> app-history;
+    callback changed();
+
+    VerticalLayout {
+        padding: 28px;
+        spacing: 26px;
+        alignment: start;
+
+        Text { text: "Settings"; font-size: 22px; font-weight: 500; color: Theme.text; }
+
+        Section {
+            title: "Theme";
+            Choice {
+                options: ["Match desktop", "Light", "Dark"];
+                current: root.theme;
+                picked(i) => {
+                    root.theme = i;
+                    root.changed();
+                }
+            }
+        }
+        Section {
+            title: "Update speed";
+            note: "How often numbers refresh. Faster uses a little more CPU.";
+            Choice {
+                options: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
+                current: root.refresh-index;
+                picked(i) => {
+                    root.refresh-index = i;
+                    root.changed();
+                }
+            }
+        }
+        Section {
+            title: "Open on";
+            Choice {
+                options: ["Processes", "Performance", "Details"];
+                current: root.start-page;
+                picked(i) => {
+                    root.start-page = i;
+                    root.changed();
+                }
+            }
+        }
+        Toggle {
+            text: "Always on top";
+            note: "Keep TaskMonitor above other windows. Works on X11; Wayland desktops don't allow apps to do this.";
+            on: root.always-on-top;
+            toggled => {
+                root.always-on-top = !root.always-on-top;
+                root.changed();
+            }
+        }
+        Toggle {
+            text: "App history";
+            note: "Record how much CPU, disk and GPU time each app uses. Stored only on this computer.";
+            on: root.app-history;
+            toggled => {
+                root.app-history = !root.app-history;
+                root.changed();
+            }
+        }
+        Section {
+            title: "Keyboard shortcuts";
+            Text {
+                text: "Ctrl+1 – Ctrl+7  switch pages\nDelete  end the selected task\nEsc  close a dialog";
+                font-size: 12.5px;
+                font-family: Theme.mono;
+                color: Theme.text-2;
+            }
+        }
+    }
+}
