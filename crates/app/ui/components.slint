@@ -1,0 +1,205 @@
+import { Theme } from "theme.slint";
+
+// White rounded panel; put a layout inside it.
+export component Card inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.radius-card;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: Theme.shadow;
+}
+
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <length> size: 44px;
+    in property <length> icon-size: 20px;
+    in property <bool> active;
+    in property <bool> outlined;
+    in property <bool> danger;
+    callback clicked;
+
+    width: size;
+    height: size;
+    border-radius: self.width / 2;
+    background: danger ? (ta.has-hover ? Theme.danger.darker(0.12) : Theme.danger)
+        : active ? Theme.card
+        : ta.has-hover ? Theme.hover
+        : outlined ? transparent : Theme.tile;
+    border-width: outlined && !active ? 1.5px : 0px;
+    border-color: Theme.outline;
+    drop-shadow-blur: active ? 14px : 0px;
+    drop-shadow-color: Theme.shadow;
+    animate background { duration: 120ms; }
+
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { root.clicked(); }
+
+    Image {
+        source: root.icon;
+        width: root.icon-size;
+        height: root.icon-size;
+        colorize: root.danger ? #ffffff : Theme.text;
+    }
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Coloured circle with initials, like the avatars in the reference design.
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: Theme.badges[0];
+    in property <length> size: 30px;
+    in property <bool> online;
+
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: tone;
+    border-width: 2px;
+    border-color: Theme.card;
+
+    Text {
+        text: root.text;
+        color: #ffffff;
+        font-size: root.size * 0.36;
+        font-weight: 600;
+    }
+
+    if root.online: Rectangle {
+        x: root.width - 9px;
+        y: root.height - 9px;
+        width: 10px;
+        height: 10px;
+        border-radius: 5px;
+        background: Theme.ok;
+        border-width: 2px;
+        border-color: Theme.card;
+    }
+}
+
+// Small rounded label, optionally with an icon.
+export component Chip inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon;
+    in property <bool> mono;
+
+    height: 30px;
+    border-radius: self.height / 2;
+    background: Theme.tile;
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 6px;
+        alignment: center;
+
+        if root.has-icon: Image {
+            source: root.icon;
+            width: 14px;
+            colorize: Theme.text-2;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.text;
+            color: Theme.text;
+            font-size: 12.5px;
+            font-family: root.mono ? Theme.mono : "Mona Sans";
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Caption over a value.
+export component Stat inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <length> value-size: 15px;
+
+    spacing: 2px;
+    Text {
+        text: root.label;
+        color: Theme.text-2;
+        font-size: 12px;
+        overflow: elide;
+    }
+    Text {
+        text: root.value;
+        color: Theme.text;
+        font-size: root.value-size;
+        font-family: Theme.mono;
+        overflow: elide;
+    }
+}
+
+// Card title row: label on the left, "more" button on the right.
+export component CardHeader inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+
+    spacing: 8px;
+    VerticalLayout {
+        alignment: center;
+        spacing: 2px;
+        Text {
+            text: root.title;
+            color: Theme.text;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            color: Theme.text-2;
+            font-size: 12px;
+        }
+    }
+    Rectangle { horizontal-stretch: 1; }
+    IconButton {
+        icon: @image-url("icons/more.svg");
+        label: "More";
+        size: 32px;
+        icon-size: 16px;
+    }
+}
+
+// Tab with a slanted right edge, as in the reference's "Project Overview" tab.
+export component AngledTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked;
+
+    property <float> w: self.width / 1px;
+    property <float> h: self.height / 1px;
+
+    height: 44px;
+    min-width: label.preferred-width + 64px;
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: root.w;
+        viewbox-height: root.h;
+        fill: root.active ? Theme.panel : transparent;
+        stroke: root.active ? transparent : Theme.line;
+        stroke-width: 1px;
+        commands: "M 0 \{root.h} L 0 16 Q 0 0 16 0 L \{root.w - 44} 0 Q \{root.w - 33} 0 \{root.w - 28} 9 L \{root.w - 12} \{root.h - 5} Q \{root.w - 9} \{root.h} \{root.w} \{root.h} Z";
+    }
+
+    label := Text {
+        x: 22px;
+        text: root.text;
+        color: root.active ? Theme.text : Theme.text-2;
+        font-size: 15px;
+        font-weight: root.active ? 500 : 400;
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

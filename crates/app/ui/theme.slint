@@ -1,0 +1,32 @@
+import { Palette } from "std-widgets.slint";
+
+export enum Page { processes, performance, history, startup, users, details, services, settings }
+
+// Design tokens. Every colour in the UI comes from here so light/dark stay in sync.
+export global Theme {
+    // Follows the desktop's light/dark preference until the user toggles it.
+    in-out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    out property <color> canvas: dark ? #0f0f10 : #ededed;
+    out property <color> panel: dark ? #161618 : #e4e4e4;
+    out property <color> card: dark ? #1c1c1f : #ffffff;
+    out property <color> tile: dark ? #26262a : #f4f4f4;
+    out property <color> hover: dark ? #303035 : #e9e9e9;
+    out property <color> outline: dark ? #2e2e33 : #ffffff;
+    out property <color> line: dark ? #2e2e33 : #e6e6e6;
+    out property <color> text: dark ? #f2f2f3 : #111111;
+    out property <color> text-2: dark ? #8e8e95 : #9a9a9a;
+    out property <color> shadow: dark ? #00000066 : #0000000f;
+
+    out property <color> accent: #ffd84d;
+    out property <color> on-accent: #111111;
+    out property <color> danger: #f25555;
+    out property <color> ok: #22c55e;
+    out property <color> bad: #ef4444;
+    // Initial badges cycle through these.
+    out property <[color]> badges: [#1f9d55, #2f7cf6, #f59e0b, #ec4899, #eab308];
+
+    out property <length> radius-card: 24px;
+    out property <length> radius-tile: 16px;
+    out property <string> mono: "Mona Sans Mono";
+}

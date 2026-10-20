@@ -1,0 +1,145 @@
+import { Theme, Page } from "theme.slint";
+import { IconButton, Badge, Chip } from "components.slint";
+
+struct RailItem {
+    page: Page,
+    icon: image,
+    label: string,
+}
+
+export component Rail inherits VerticalLayout {
+    in property <Page> current;
+    callback selected(Page);
+    callback end-task();
+
+    property <[RailItem]> items: [
+        { page: Page.processes, icon: @image-url("icons/processes.svg"), label: "Processes" },
+        { page: Page.performance, icon: @image-url("icons/performance.svg"), label: "Performance" },
+        { page: Page.history, icon: @image-url("icons/history.svg"), label: "App history" },
+        { page: Page.startup, icon: @image-url("icons/startup.svg"), label: "Startup apps" },
+        { page: Page.users, icon: @image-url("icons/users.svg"), label: "Users" },
+        { page: Page.details, icon: @image-url("icons/details.svg"), label: "Details" },
+        { page: Page.services, icon: @image-url("icons/services.svg"), label: "Services" },
+    ];
+
+    width: 52px;
+    spacing: 12px;
+    alignment: start;
+
+    for item in root.items: IconButton {
+        icon: item.icon;
+        label: item.label;
+        size: 48px;
+        outlined: true;
+        active: root.current == item.page;
+        clicked => { root.selected(item.page); }
+    }
+
+    Rectangle { vertical-stretch: 1; }
+
+    IconButton {
+        icon: @image-url("icons/settings.svg");
+        label: "Settings";
+        size: 48px;
+        outlined: true;
+        active: root.current == Page.settings;
+        clicked => { root.selected(Page.settings); }
+    }
+    IconButton {
+        icon: @image-url("icons/close.svg");
+        label: "End task";
+        size: 48px;
+        danger: true;
+        clicked => { root.end-task(); }
+    }
+}
+
+export component TopBar inherits HorizontalLayout {
+    in property <string> user-name;
+    in property <string> user-initials;
+    in property <string> uptime: "—";
+    in property <string> cpu: "—";
+    in property <string> ram: "—";
+    in property <string> gpu: "—";
+
+    height: 60px;
+    spacing: 12px;
+
+    // Summary pill: the reference's "On Meet" bar.
+    Rectangle {
+        horizontal-stretch: 0;
+        background: Theme.card;
+        border-radius: self.height / 2;
+        drop-shadow-blur: 24px;
+        drop-shadow-offset-y: 4px;
+        drop-shadow-color: Theme.shadow;
+
+        HorizontalLayout {
+            padding-left: 22px;
+            padding-right: 8px;
+            spacing: 10px;
+            alignment: start;
+
+            Text {
+                text: "TaskMonitor";
+                font-size: 16px;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            Rectangle { width: 6px; }
+            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/cpu.svg"); text: "CPU  " + root.cpu; mono: true; } }
+            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/memory.svg"); text: "RAM  " + root.ram; mono: true; } }
+            VerticalLayout { alignment: center; Chip { has-icon: true; icon: @image-url("icons/gpu.svg"); text: "GPU  " + root.gpu; mono: true; } }
+        }
+    }
+
+    Rectangle { horizontal-stretch: 1; }
+
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: @image-url("icons/search.svg");
+            label: "Search";
+            size: 48px;
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: Theme.dark ? @image-url("icons/sun.svg") : @image-url("icons/moon.svg");
+            label: Theme.dark ? "Switch to light theme" : "Switch to dark theme";
+            size: 48px;
+            clicked => { Theme.dark = !Theme.dark; }
+        }
+    }
+
+    // User pill: name and uptime, initials badge on the right.
+    Rectangle {
+        background: Theme.card;
+        border-radius: self.height / 2;
+        drop-shadow-blur: 24px;
+        drop-shadow-offset-y: 4px;
+        drop-shadow-color: Theme.shadow;
+
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 8px;
+            spacing: 12px;
+
+            VerticalLayout {
+                alignment: center;
+                Text { text: root.user-name; font-size: 14px; font-weight: 500; color: Theme.text; }
+                Text { text: "Up " + root.uptime; font-size: 11.5px; color: Theme.text-2; font-family: Theme.mono; }
+            }
+            VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: root.user-initials;
+                    tone: Theme.badges[3];
+                    size: 42px;
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,26 @@
+import { Theme } from "../theme.slint";
+import { Card } from "../components.slint";
+
+// Stand-in for pages that later milestones fill in.
+export component PlaceholderPage inherits Card {
+    in property <string> title;
+    in property <string> note;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 8px;
+        Text {
+            text: root.title;
+            font-size: 28px;
+            font-weight: 500;
+            color: Theme.text;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: root.note;
+            font-size: 14px;
+            color: Theme.text-2;
+            horizontal-alignment: center;
+        }
+    }
+}

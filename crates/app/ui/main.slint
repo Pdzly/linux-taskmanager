@@ -1,0 +1,69 @@
+import "../fonts/MonaSans-Light.ttf";
+import "../fonts/MonaSans-Regular.ttf";
+import "../fonts/MonaSans-Medium.ttf";
+import "../fonts/MonaSans-SemiBold.ttf";
+import "../fonts/MonaSansMono-Regular.ttf";
+import "../fonts/MonaSansMono-Medium.ttf";
+
+import { Theme, Page } from "theme.slint";
+export { Theme }
+import { Rail, TopBar } from "shell.slint";
+import { PerformancePage } from "pages/performance.slint";
+import { PlaceholderPage } from "pages/placeholder.slint";
+
+export component MainWindow inherits Window {
+    title: "TaskMonitor";
+    icon: @image-url("icons/logo.svg");
+    preferred-width: 1320px;
+    preferred-height: 860px;
+    min-width: 1100px;
+    min-height: 720px;
+    background: Theme.canvas;
+    default-font-family: "Mona Sans";
+    default-font-size: 14px;
+
+    in property <string> user-name;
+    in property <string> user-initials;
+    in property <[float]> core-load;
+    in-out property <Page> page: Page.performance;
+    callback run-command(string);
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 20px;
+
+        HorizontalLayout {
+            spacing: 20px;
+            VerticalLayout {
+                alignment: center;
+                Image { source: @image-url("icons/logo.svg"); width: 52px; height: 52px; }
+            }
+            TopBar {
+                user-name: root.user-name;
+                user-initials: root.user-initials;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 20px;
+            Rail {
+                current: root.page;
+                selected(p) => { root.page = p; }
+            }
+
+            if root.page == Page.performance: PerformancePage {
+                user-name: root.user-name;
+                user-initials: root.user-initials;
+                core-load: root.core-load;
+                run-command(cmd) => { root.run-command(cmd); }
+            }
+            if root.page == Page.processes: PlaceholderPage { title: "Processes"; note: "Apps and background processes arrive in M2."; }
+            if root.page == Page.history: PlaceholderPage { title: "App history"; note: "Per-app resource history arrives in M6."; }
+            if root.page == Page.startup: PlaceholderPage { title: "Startup apps"; note: "Autostart entries arrive in M5."; }
+            if root.page == Page.users: PlaceholderPage { title: "Users"; note: "Sessions and per-user usage arrive in M5."; }
+            if root.page == Page.details: PlaceholderPage { title: "Details"; note: "The full process table arrives in M2."; }
+            if root.page == Page.services: PlaceholderPage { title: "Services"; note: "systemd units arrive in M5."; }
+            if root.page == Page.settings: PlaceholderPage { title: "Settings"; note: "Theme, refresh rate and defaults arrive in M6."; }
+        }
+    }
+}

@@ -1,0 +1,424 @@
+import { Theme } from "../theme.slint";
+import { Card, CardHeader, Chip, Stat, Badge, IconButton, AngledTab } from "../components.slint";
+
+// Yellow-banded hero card (the reference's "To do list" card).
+component CpuCard inherits Rectangle {
+    in property <string> model-name;
+    in property <string> usage;
+    in property <string> speed;
+    in property <string> processes;
+    in property <string> threads;
+    in property <[float]> core-load;
+
+    background: Theme.accent;
+    border-radius: Theme.radius-card;
+    drop-shadow-blur: 24px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: Theme.shadow;
+
+    VerticalLayout {
+        // Header band
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 16px;
+            height: 52px;
+            spacing: 10px;
+            Image {
+                source: @image-url("../icons/cpu.svg");
+                width: 18px;
+                colorize: Theme.on-accent;
+            }
+            Text {
+                text: root.model-name;
+                font-size: 15px;
+                font-weight: 500;
+                color: Theme.on-accent;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: root.core-load.length + " threads";
+                font-size: 13px;
+                color: Theme.on-accent;
+                vertical-alignment: center;
+            }
+        }
+
+        // Inner white sheet, inset 2px so the yellow shows as a thin rim
+        HorizontalLayout {
+            padding-left: 2px;
+            padding-right: 2px;
+            padding-bottom: 2px;
+            Rectangle {
+                background: Theme.card;
+                border-radius: Theme.radius-card - 2px;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 14px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        Chip { text: "Utilization"; }
+                        Chip { text: "Per core"; }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 24px;
+                        VerticalLayout {
+                            alignment: end;
+                            spacing: 0px;
+                            Text {
+                                text: root.usage;
+                                font-size: 84px;
+                                font-weight: 300;
+                                letter-spacing: -3px;
+                                color: Theme.text;
+                            }
+                            Text { text: "Utilization"; font-size: 12px; color: Theme.text-2; }
+                        }
+                        // Per-core mini bars; the filled part grows with load (0..1).
+                        HorizontalLayout {
+                            spacing: 4px;
+                            horizontal-stretch: 1;
+                            for load in root.core-load: Rectangle {
+                                background: Theme.tile;
+                                border-radius: 4px;
+                                Rectangle {
+                                    y: parent.height - self.height;
+                                    height: parent.height * clamp(load, 0, 1);
+                                    background: Theme.accent;
+                                    border-radius: 4px;
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 24px;
+                        Stat { label: "Speed"; value: root.speed; }
+                        Stat { label: "Processes"; value: root.processes; }
+                        Stat { label: "Threads"; value: root.threads; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Big-numeral card (the reference's "Sunday, Feb 10" card).
+component MemoryCard inherits Card {
+    in property <string> total;
+    in property <string> used;
+    in property <string> available;
+    in property <string> cached;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        CardHeader { title: "Memory"; subtitle: root.total + " total"; }
+        Rectangle {
+            background: Theme.tile;
+            border-radius: Theme.radius-tile;
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 16px;
+                alignment: center;
+                Text { text: "In use"; font-size: 13px; color: Theme.text-2; horizontal-alignment: center; }
+                Text {
+                    text: root.used;
+                    font-size: 72px;
+                    font-weight: 300;
+                    letter-spacing: -2px;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                }
+                Text { text: "GB"; font-size: 13px; color: Theme.text-2; horizontal-alignment: center; }
+            }
+        }
+        // Composition bar; segments are sized from real data in M1.
+        Rectangle { height: 8px; border-radius: 4px; background: Theme.tile; }
+        HorizontalLayout {
+            spacing: 16px;
+            Stat { label: "Available"; value: root.available; }
+            Stat { label: "Cached"; value: root.cached; }
+        }
+    }
+}
+
+component UsersCard inherits Card {
+    in property <string> user-name;
+    in property <string> user-initials;
+    in property <string> session;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 10px;
+            Image { source: @image-url("../icons/users.svg"); width: 18px; colorize: Theme.text; }
+            Text { text: "Users"; font-size: 16px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Badge { text: root.user-initials; tone: Theme.badges[3]; online: true; }
+            }
+        }
+        // One tile per logged-in session; M5 fills this from logind.
+        Rectangle {
+            background: Theme.tile;
+            border-radius: Theme.radius-tile;
+            height: 72px;
+            HorizontalLayout {
+                padding: 14px;
+                spacing: 12px;
+                VerticalLayout {
+                    alignment: center;
+                    Badge { text: root.user-initials; tone: Theme.badges[3]; size: 40px; online: true; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text { text: root.user-name; font-size: 14px; font-weight: 500; color: Theme.text; }
+                    Text { text: root.session; font-size: 12px; color: Theme.text-2; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    IconButton { icon: @image-url("../icons/arrow-up-right.svg"); label: "Open Users"; size: 36px; icon-size: 16px; }
+                }
+            }
+        }
+        Rectangle {
+            border-radius: Theme.radius-tile;
+            border-width: 1.5px;
+            border-color: Theme.line;
+            height: 56px;
+            Text { text: "CPU and memory per user arrive in M5"; font-size: 12px; color: Theme.text-2; }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+}
+
+// The reference's "Detailed Report" card with day columns.
+component ThroughputCard inherits Card {
+    in property <string> title;
+    in property <string> subtitle;
+    in property <[{label: string, value: string, unit: string}]> columns;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+        CardHeader { title: root.title; subtitle: root.subtitle; }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            spacing: 12px;
+            for col in root.columns: VerticalLayout {
+                spacing: 6px;
+                horizontal-stretch: 1;
+                Text { text: col.label; font-size: 12.5px; color: Theme.text; }
+                HorizontalLayout {
+                    spacing: 4px;
+                    alignment: start;
+                    Text { text: col.value; font-size: 26px; font-weight: 300; color: Theme.text; font-family: Theme.mono; }
+                    Text { text: col.unit; font-size: 11px; color: Theme.text-2; vertical-alignment: bottom; }
+                }
+            }
+        }
+    }
+}
+
+// The reference's "AI Chat" card, reused as a command box.
+component RunTaskCard inherits Card {
+    in property <string> user-name;
+    callback run(string);
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 10px;
+            Image { source: @image-url("../icons/terminal.svg"); width: 18px; colorize: Theme.text; }
+            Text { text: "Run new task"; font-size: 16px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            HorizontalLayout {
+                alignment: start;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        background: Theme.tile;
+                        border-radius: Theme.radius-tile;
+                        HorizontalLayout {
+                            padding: 14px;
+                            Text {
+                                text: "Type a command and press Enter.\nIt runs as " + root.user-name + ", detached from TaskMonitor.";
+                                font-size: 12.5px;
+                                color: Theme.text-2;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 52px;
+            border-radius: self.height / 2;
+            background: Theme.tile;
+            HorizontalLayout {
+                padding-left: 18px;
+                padding-right: 6px;
+                spacing: 8px;
+                Rectangle {
+                    horizontal-stretch: 1;
+                    input := TextInput {
+                        width: 100%;
+                        height: 100%;
+                        vertical-alignment: center;
+                        font-size: 13.5px;
+                        color: Theme.text;
+                        font-family: Theme.mono;
+                        accessible-label: "Command to run";
+                        accepted => {
+                            root.run(self.text);
+                            self.text = "";
+                        }
+                    }
+                    if input.text == "": Text {
+                        x: 0;
+                        text: "Run a command…";
+                        font-size: 13.5px;
+                        color: Theme.text-2;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 20px;
+                        background: Theme.text;
+                        Image { source: @image-url("../icons/send.svg"); width: 16px; colorize: Theme.card; }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.run(input.text);
+                                input.text = "";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The reference's "Performances 5.7" card.
+component SystemCard inherits Card {
+    in property <string> load;
+    in property <string> uptime;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 4px;
+        CardHeader { title: "System"; subtitle: "Load average, 1 min"; }
+        Rectangle { vertical-stretch: 1; }
+        Text { text: root.load; font-size: 72px; font-weight: 300; letter-spacing: -2px; color: Theme.text; }
+        Text { text: "Uptime " + root.uptime; font-size: 12px; color: Theme.text-2; font-family: Theme.mono; }
+    }
+}
+
+export component PerformancePage inherits VerticalLayout {
+    in property <string> user-name;
+    in property <string> user-initials;
+    in property <string> uptime: "—";
+    in property <[float]> core-load;
+    callback run-command(string);
+
+    property <int> tab: 0;
+
+    spacing: 0px;
+
+    HorizontalLayout {
+        spacing: 16px;
+        height: 330px;
+        CpuCard {
+            horizontal-stretch: 1.3;
+            model-name: "Processor";
+            usage: "—";
+            speed: "—";
+            processes: "—";
+            threads: "—";
+            core-load: root.core-load;
+        }
+        MemoryCard {
+            width: 260px;
+            total: "—";
+            used: "—";
+            available: "—";
+            cached: "—";
+        }
+        UsersCard {
+            horizontal-stretch: 1;
+            user-name: root.user-name;
+            user-initials: root.user-initials;
+            session: "Local session · this seat";
+        }
+    }
+
+    Rectangle { height: 18px; }
+
+    HorizontalLayout {
+        spacing: 0px;
+        alignment: start;
+        AngledTab { text: "Disk"; active: root.tab == 0; clicked => { root.tab = 0; } }
+        AngledTab { text: "Network"; active: root.tab == 1; clicked => { root.tab = 1; } }
+        AngledTab { text: "GPU"; active: root.tab == 2; clicked => { root.tab = 2; } }
+    }
+
+    Rectangle {
+        background: Theme.panel;
+        border-radius: Theme.radius-card;
+        border-top-left-radius: 0px;
+        vertical-stretch: 1;
+
+        HorizontalLayout {
+            padding: 16px;
+            spacing: 16px;
+
+            ThroughputCard {
+                horizontal-stretch: 1.2;
+                title: root.tab == 0 ? "Disks" : root.tab == 1 ? "Network" : "Graphics";
+                subtitle: root.tab == 0 ? "Read and write throughput" : root.tab == 1 ? "Send and receive rates" : "Utilization and video memory";
+                columns: root.tab == 0 ? [
+                    { label: "Read ↑", value: "—", unit: "MB/s" },
+                    { label: "Write ↓", value: "—", unit: "MB/s" },
+                    { label: "Active", value: "—", unit: "%" },
+                    { label: "Response", value: "—", unit: "ms" },
+                ] : root.tab == 1 ? [
+                    { label: "Receive ↓", value: "—", unit: "Mb/s" },
+                    { label: "Send ↑", value: "—", unit: "Mb/s" },
+                    { label: "Adapters", value: "—", unit: "" },
+                ] : [
+                    { label: "Usage", value: "—", unit: "%" },
+                    { label: "VRAM", value: "—", unit: "GB" },
+                    { label: "Temp", value: "—", unit: "°C" },
+                ];
+            }
+            RunTaskCard {
+                horizontal-stretch: 1.3;
+                user-name: root.user-name;
+                run(cmd) => { root.run-command(cmd); }
+            }
+            SystemCard {
+                width: 230px;
+                load: "—";
+                uptime: root.uptime;
+            }
+        }
+    }
+}

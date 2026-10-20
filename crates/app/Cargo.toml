@@ -1,0 +1,20 @@
+[package]
+name = "taskmonitor"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+taskmonitor-core = { path = "../core" }
+# Software renderer only: the OpenGL path loads ~100 MB of Mesa/NVIDIA driver libraries
+# (and can wake a sleeping dGPU), while this UI only repaints small regions once a second.
+slint = { version = "1.18", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-software",
+    "accessibility",
+] }
+
+[build-dependencies]
+slint-build = "1.18"
