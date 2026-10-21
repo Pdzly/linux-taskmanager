@@ -9,14 +9,20 @@ export component Button inherits Rectangle {
     in property <bool> primary;
     in property <bool> danger;
     in property <bool> enabled: true;
+    // For buttons sitting on a grey tile: white with a hairline border, so they
+    // still read as buttons.
+    in property <bool> raised;
     callback clicked;
 
     height: 40px;
+    border-width: raised && !primary && !danger ? 1px : 0px;
+    border-color: Theme.line;
     min-width: label.preferred-width + 36px;
     border-radius: self.height / 2;
     opacity: enabled ? 1 : 0.4;
     background: danger ? (ta.has-hover ? Theme.danger.darker(0.12) : Theme.danger)
         : primary ? (ta.has-hover ? Theme.text.transparentize(0.15) : Theme.text)
+        : raised ? (ta.has-hover ? Theme.hover : Theme.card)
         : ta.has-hover ? Theme.hover : Theme.tile;
     accessible-role: button;
     accessible-label: text;

@@ -32,6 +32,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // Needs the platform that MainWindow::new() set up, and must happen before showing.
     slint::set_xdg_app_id("io.github.taskmonitor")?;
     ui.set_version(env!("CARGO_PKG_VERSION").into());
+    ui.set_wayland(
+        std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland"),
+    );
+    ui.on_open_url(|url| {
+        let _ = std::process::Command::new("xdg-open").arg(url.as_str()).spawn();
+    });
 
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     let initials: String = user.chars().take(2).collect::<String>().to_uppercase();
