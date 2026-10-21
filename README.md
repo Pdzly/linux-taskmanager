@@ -28,6 +28,7 @@
 - **App history** (opt-in): CPU, disk and GPU time per app, kept only on your computer.
 - **Top-bar stats**: one click puts live CPU, RAM and GPU use in your desktop's top bar (system tray). On Ubuntu/GNOME the numbers show next to the icon; on KDE they show when you hover it.
 - **App icons** from your icon theme, with initials for processes that have none.
+- **Update checker**: once a day (or on demand in Settings) TaskMonitor asks GitHub whether a newer version exists and shows an "Update" pill in the top bar if so. It never installs anything by itself, and it can be turned off.
 - Light and dark themes, sidebar icon tooltips, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Delete ends the selected task, Esc closes dialogs).
 
 TaskMonitor is written in Rust with [Slint](https://slint.dev). It uses about 1–2% of one CPU core and around 35 MB of memory, and it doesn't wake a sleeping laptop GPU.

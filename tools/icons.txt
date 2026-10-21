@@ -38,3 +38,4 @@ info           info
 external       external-link
 bug            bug
 behaviour      sliders-horizontal
+download       download

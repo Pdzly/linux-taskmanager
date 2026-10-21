@@ -37,6 +37,13 @@ export component MainWindow inherits Window {
     // Running on Wayland (no always-on-top for apps).
     in property <bool> wayland;
     callback open-url(string);
+    // Update checker
+    in-out property <bool> auto-update-check: true;
+    in property <bool> checking-updates;
+    in property <string> update-version;
+    in property <string> update-url;
+    in property <string> update-status;
+    callback check-updates();
     in property <string> user-name;
     in property <string> user-initials;
     in property <Summary> summary: { cpu: "—", ram: "—", gpu: "—", uptime: "—" };
@@ -187,6 +194,8 @@ export component MainWindow inherits Window {
                     summary: root.summary;
                     refresh-changed(i) => { root.refresh-changed(i); }
                     top-bar-stats: root.top-bar-stats;
+                    update-version: root.update-version;
+                    update-clicked => { root.go(Page.settings); }
                     top-bar-toggled => {
                         root.top-bar-stats = !root.top-bar-stats;
                         root.top-bar-toggled(root.top-bar-stats);
@@ -322,6 +331,12 @@ export component MainWindow inherits Window {
                     top-bar-toggled(on) => { root.top-bar-toggled(on); }
                     clear-history => { root.request("clear-history", ""); }
                     open-url(url) => { root.open-url(url); }
+                    auto-update-check <=> root.auto-update-check;
+                    checking-updates: root.checking-updates;
+                    update-version: root.update-version;
+                    update-url: root.update-url;
+                    update-status: root.update-status;
+                    check-updates => { root.check-updates(); }
                 }
             }
         }

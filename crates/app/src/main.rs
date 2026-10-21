@@ -7,6 +7,7 @@ mod processes;
 mod settings;
 mod system_pages;
 mod tray;
+mod updates;
 
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
@@ -57,6 +58,18 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_on_top(prefs.always_on_top);
     ui.set_app_history(prefs.app_history);
     ui.set_top_bar_stats(prefs.top_bar_stats);
+    ui.set_auto_update_check(prefs.check_updates);
+    ui.set_update_status(last_checked_text(settings::last_update_check()).into());
+    ui.on_check_updates({
+        let ui = ui.as_weak();
+        move || check_for_updates(ui.clone(), true)
+    });
+    // Automatic check: once a day, a few seconds after start so it never slows startup.
+    let now = unix_now();
+    if prefs.check_updates && now.saturating_sub(settings::last_update_check()) >= updates::INTERVAL_SECS {
+        let ui = ui.as_weak();
+        slint::Timer::single_shot(Duration::from_secs(8), move || check_for_updates(ui, false));
+    }
     if prefs.top_bar_stats {
         send(Cmd::TopBar(true));
     }
@@ -246,6 +259,7 @@ fn save_settings(ui: &MainWindow) {
         always_on_top: ui.get_on_top(),
         app_history: ui.get_app_history(),
         top_bar_stats: ui.get_top_bar_stats(),
+        check_updates: ui.get_auto_update_check(),
     };
     if let Err(e) = prefs.save() {
         ui.set_toast(format!("Couldn't save settings: {e}").into());
@@ -676,5 +690,62 @@ fn push_history(
         app_icons::apply(&ui, new_icons);
         bridge::sync(ui.get_history_rows(), rows, |m| ui.set_history_rows(m));
         ui.set_history_since(since.into());
+    });
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+fn last_checked_text(when: u64) -> String {
+    if when == 0 {
+        return "Not checked yet.".into();
+    }
+    let ago = unix_now().saturating_sub(when);
+    let ago = match ago {
+        0..120 => "just now".to_owned(),
+        120..7200 => format!("{} minutes ago", ago / 60),
+        7200..172_800 => format!("{} hours ago", ago / 3600),
+        _ => format!("{} days ago", ago / 86_400),
+    };
+    format!("You're up to date. Last checked {ago}.")
+}
+
+/// Runs the update check on its own thread (it waits on the network). `manual` checks
+/// report every outcome; automatic ones stay quiet unless there's an update.
+fn check_for_updates(ui: slint::Weak<MainWindow>, manual: bool) {
+    let _ = ui.upgrade_in_event_loop(|ui| ui.set_checking_updates(true));
+    std::thread::spawn(move || {
+        // Dev aid: TASKMONITOR_PRETEND_VERSION=0.0.1 shows the "update available" state.
+        let current = std::env::var("TASKMONITOR_PRETEND_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
+        let result = updates::check(&current);
+        if result.is_ok() {
+            settings::set_last_update_check(unix_now());
+        }
+        let _ = ui.upgrade_in_event_loop(move |ui| {
+            ui.set_checking_updates(false);
+            match result {
+                Ok(updates::Outcome::Available(release)) => {
+                    ui.set_update_status(
+                        "Download the package for your system from the release page, then install it as before.".into(),
+                    );
+                    ui.set_update_version(release.version.as_str().into());
+                    ui.set_update_url(release.url.into());
+                    ui.set_toast(format!("TaskMonitor {} is available", release.version).into());
+                }
+                Ok(updates::Outcome::UpToDate) => {
+                    ui.set_update_status(last_checked_text(unix_now()).into());
+                    if manual {
+                        ui.set_toast("TaskMonitor is up to date".into());
+                    }
+                }
+                Err(e) => {
+                    ui.set_update_status(format!("Couldn't check for updates: {e}.").into());
+                    if manual {
+                        ui.set_toast(format!("Couldn't check for updates: {e}").into());
+                    }
+                }
+            }
+        });
     });
 }

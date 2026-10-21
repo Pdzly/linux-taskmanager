@@ -69,6 +69,9 @@ export component TopBar inherits HorizontalLayout {
     callback theme-toggled();
     in property <bool> top-bar-stats;
     callback top-bar-toggled();
+    // Newer version on GitHub, or empty.
+    in property <string> update-version;
+    callback update-clicked();
     property <[string]> refresh-labels: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
 
     height: 60px;
@@ -100,6 +103,27 @@ export component TopBar inherits HorizontalLayout {
             VerticalLayout { alignment: center; Chip { icon: Icons.cpu; text: "CPU  " + root.summary.cpu; mono: true; } }
             VerticalLayout { alignment: center; Chip { icon: Icons.memory; text: "RAM  " + root.summary.ram; mono: true; } }
             VerticalLayout { alignment: center; Chip { icon: Icons.gpu; text: "GPU  " + root.summary.gpu; mono: true; } }
+            if root.update-version != "": VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    height: 30px;
+                    width: update-label.preferred-width + 40px;
+                    border-radius: self.height / 2;
+                    background: update-ta.has-hover ? Theme.accent.darker(0.08) : Theme.accent;
+                    accessible-role: button;
+                    accessible-label: "Version " + root.update-version + " is available";
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        spacing: 6px;
+                        VerticalLayout { alignment: center; Icon { glyph: Icons.download; size: 14px; tint: Theme.on-accent; } }
+                        update-label := Text { text: "Update " + root.update-version; font-size: 12.5px; font-weight: 600; color: Theme.on-accent; vertical-alignment: center; }
+                    }
+                    update-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.update-clicked(); }
+                    }
+                }
+            }
         }
     }
 

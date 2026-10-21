@@ -158,6 +158,14 @@ export component SettingsPage inherits Card {
     callback top-bar-toggled(bool);
     callback clear-history();
     callback open-url(string);
+    // Update checker
+    in-out property <bool> auto-update-check;
+    in property <bool> checking-updates;
+    // Set when a newer version exists; empty otherwise.
+    in property <string> update-version;
+    in property <string> update-url;
+    in property <string> update-status;
+    callback check-updates();
 
     property <[string]> speeds: ["0.5 s", "1 s", "2 s", "5 s"];
     property <[string]> speed-words: ["twice a second", "every second", "every 2 seconds", "every 5 seconds"];
@@ -265,6 +273,41 @@ export component SettingsPage inherits Card {
                                         root.changed();
                                     }
                                 }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "UPDATES";
+                        icon: Icons.download;
+                        Row {
+                            title: "Check for updates automatically";
+                            note: "Once a day, TaskMonitor asks GitHub for the latest version number. No personal or system information is included.";
+                            Switch {
+                                on: root.auto-update-check;
+                                label: "Check for updates automatically";
+                                toggled => {
+                                    root.auto-update-check = !root.auto-update-check;
+                                    root.changed();
+                                }
+                            }
+                        }
+                        Row {
+                            title: root.update-version != "" ? "Version " + root.update-version + " is available" : "TaskMonitor " + root.version;
+                            note: root.update-status;
+                            last: true;
+                            if root.update-version != "": Button {
+                                text: "Download";
+                                primary: true;
+                                height: 34px;
+                                clicked => { root.open-url(root.update-url); }
+                            }
+                            if root.update-version == "": Button {
+                                text: root.checking-updates ? "Checking…" : "Check now";
+                                raised: true;
+                                height: 34px;
+                                enabled: !root.checking-updates;
+                                clicked => { root.check-updates(); }
                             }
                         }
                     }
