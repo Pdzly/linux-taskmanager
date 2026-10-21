@@ -6,13 +6,19 @@
 
 <p align="center">A modern, lightweight task manager for Linux: everything Windows Task Manager does, in a clean card-based UI.</p>
 
+<p align="center">
+  <a href="https://discord.gg/NpS9WmSW23"><img src="https://img.shields.io/badge/Join%20us%20on-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join us on Discord"></a>
+</p>
+
 ![Processes](docs/screenshots/processes.png)
 
-| Performance | Services |
+| Performance | Dark theme |
 |---|---|
-| ![Performance](docs/screenshots/performance.png) | ![Services](docs/screenshots/services.png) |
-| **Startup apps** | **Dark theme** |
-| ![Startup apps](docs/screenshots/startup.png) | ![Dark theme](docs/screenshots/performance-dark.png) |
+| ![Performance](docs/screenshots/performance.png) | ![Performance in the dark theme](docs/screenshots/performance-dark.png) |
+| **Services** | **Startup apps** |
+| ![Services](docs/screenshots/services.png) | ![Startup apps](docs/screenshots/startup.png) |
+| **Details** | **Settings** |
+| ![Details](docs/screenshots/details.png) | ![Settings](docs/screenshots/settings.png) |
 
 ## Features
 
