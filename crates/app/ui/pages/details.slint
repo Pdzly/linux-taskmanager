@@ -7,15 +7,15 @@ import { DetailRow, ProcTotals } from "../types.slint";
 
 // Every process, kernel threads included, one row each (Windows' Details tab).
 global DCols {
-    out property <length> name: 220px;
+    out property <length> name: 196px;
     out property <length> pid: 84px;
-    out property <length> status: 120px;
-    out property <length> user: 110px;
+    out property <length> status: 104px;
+    out property <length> user: 100px;
     out property <length> cpu: 72px;
     out property <length> mem: 100px;
     out property <length> io: 92px;
-    out property <length> threads: 84px;
-    out property <length> nice: 64px;
+    out property <length> threads: 72px;
+    out property <length> nice: 52px;
 }
 
 component DRow inherits Rectangle {
@@ -79,6 +79,12 @@ export component DetailsPage inherits Card {
     callback properties(string);
     callback affinity(string);
 
+    // A new sort order or search shows the list from the top; otherwise the view
+    // stays wherever the old order had it, which looks like rows went missing.
+    changed sort-column => { list.viewport-y = 0; }
+    changed ascending => { list.viewport-y = 0; }
+    changed filter => { list.viewport-y = 0; }
+
     VerticalLayout {
         padding: 20px;
         padding-bottom: 8px;
@@ -132,7 +138,7 @@ export component DetailsPage inherits Card {
         }
         Rectangle { height: 1px; background: Theme.line; }
 
-        ListView {
+        list := ListView {
             vertical-stretch: 1;
             for row in root.rows: DRow {
                 item: row;

@@ -210,6 +210,10 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_page(page);
         ui.invoke_page_changed(page);
     }
+    // Dev aid: TASKMONITOR_SORT=mem sorts the tables by that column (for screenshots).
+    if let Ok(column) = std::env::var("TASKMONITOR_SORT") {
+        ui.invoke_sort(column.into());
+    }
     if let Some(tab) = std::env::var("TASKMONITOR_TAB").ok().and_then(|t| t.parse().ok()) {
         ui.set_perf_tab(tab);
         ui.invoke_perf_tab_changed(tab);

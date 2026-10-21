@@ -136,6 +136,12 @@ export component ProcessesPage inherits Card {
     callback affinity(string);
     callback run-task();
 
+    // A new sort order or search shows the list from the top; otherwise the view
+    // stays wherever the old order had it, which looks like rows went missing.
+    changed sort-column => { list.viewport-y = 0; }
+    changed ascending => { list.viewport-y = 0; }
+    changed filter => { list.viewport-y = 0; }
+
     VerticalLayout {
         padding: 20px;
         padding-bottom: 8px;
@@ -241,7 +247,7 @@ export component ProcessesPage inherits Card {
         }
         Rectangle { height: 1px; background: Theme.line; }
 
-        ListView {
+        list := ListView {
             vertical-stretch: 1;
             for row in root.rows: Row {
                 item: row;
