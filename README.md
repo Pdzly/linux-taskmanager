@@ -24,7 +24,7 @@
 - **Startup apps**: switch autostart entries on and off.
 - **Users**: signed-in sessions with per-user CPU and memory; lock or sign out.
 - **App history** (opt-in): CPU, disk and GPU time per app, kept only on your computer.
-- Light and dark themes, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Delete ends the selected task, Esc closes dialogs).
+- Light and dark themes, sidebar icon tooltips, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Delete ends the selected task, Esc closes dialogs).
 
 TaskMonitor is written in Rust with [Slint](https://slint.dev). It uses about 1–2% of one CPU core and around 35 MB of memory, and it doesn't wake a sleeping laptop GPU.
 
