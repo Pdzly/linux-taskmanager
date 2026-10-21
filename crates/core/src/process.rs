@@ -37,6 +37,9 @@ pub struct Process {
     pub memory: u64,
     pub read_bps: f64,
     pub write_bps: f64,
+    /// Bytes read from / written to storage since the process started; None when
+    /// the kernel won't say (other users' processes, unless running as root).
+    pub io_total: Option<(u64, u64)>,
     pub threads: u32,
     pub nice: i32,
     /// Running under SCHED_IDLE (TaskMonitor's "Efficiency mode").
@@ -243,6 +246,7 @@ impl ProcessSampler {
             memory: resident.saturating_sub(shared) * self.page_size,
             read_bps,
             write_bps,
+            io_total: io,
             threads: stat.threads,
             nice: stat.nice,
             efficiency: stat.efficiency,

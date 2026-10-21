@@ -105,9 +105,30 @@ pub fn info(pid: u32) -> Vec<(String, String)> {
         ("Memory (resident)".into(), field("VmRSS")),
         ("Memory (peak)".into(), field("VmHWM")),
         ("Swap".into(), field("VmSwap")),
+        ("Disk read (total)".into(), disk_total(pid, |io| io.0)),
+        ("Disk written (total)".into(), disk_total(pid, |io| io.1)),
         ("Open files".into(), fs::read_dir(format!("/proc/{pid}/fd")).map_or("Not accessible".into(), |d| d.count().to_string())),
         ("Control group".into(), read("cgroup").lines().find_map(|l| l.strip_prefix("0::")).unwrap_or("").to_owned()),
     ]
+}
+
+/// Bytes a process has read or written since it started, from /proc/[pid]/io.
+fn disk_total(pid: u32, pick: fn((u64, u64)) -> u64) -> String {
+    match fs::read_to_string(format!("/proc/{pid}/io")) {
+        Ok(text) => human_bytes(pick(crate::process::parse_io(&text))),
+        Err(_) => "Not accessible (another user's process)".into(),
+    }
+}
+
+fn human_bytes(b: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut v = b as f64;
+    let mut unit = 0;
+    while v >= 1024.0 && unit < UNITS.len() - 1 {
+        v /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 { format!("{b} B") } else { format!("{v:.1} {}", UNITS[unit]) }
 }
 
 /// Starts a command line through `sh -c`, detached from TaskMonitor (own process
@@ -143,6 +164,7 @@ mod tests {
             memory: 0,
             read_bps: 0.0,
             write_bps: 0.0,
+            io_total: None,
             threads: 1,
             nice: 0,
             efficiency: false,
@@ -150,6 +172,13 @@ mod tests {
             icon: None,
             group: Group::Background,
         }
+    }
+
+    #[test]
+    fn human_sizes() {
+        assert_eq!(human_bytes(512), "512 B");
+        assert_eq!(human_bytes(1536), "1.5 KB");
+        assert_eq!(human_bytes(3 * 1024 * 1024 * 1024), "3.0 GB");
     }
 
     #[test]

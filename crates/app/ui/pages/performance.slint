@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
-import { Card, CardHeader, Chip, Stat, Badge, IconButton, AngledTab, Graph, Icon } from "../components.slint";
+import { Card, CardHeader, Chip, Stat, Badge, IconButton, AngledTab, Graph, Icon, AppIcon } from "../components.slint";
 import { Icons } from "../icons.slint";
-import { CpuView, MemView, DeviceView, SysView } from "../types.slint";
+import { CpuView, MemView, DeviceView, SysView, DiskProcRow } from "../types.slint";
 
 // Yellow-banded hero card (the reference's "To do list" card).
 component CpuCard inherits Rectangle {
@@ -310,89 +310,55 @@ component DeviceCard inherits Card {
     }
 }
 
-// The reference's "AI Chat" card, reused as a command box.
-component RunTaskCard inherits Card {
-    in property <string> user-name;
-    callback run(string);
+// Processes reading and writing the most right now (the reference's "AI Chat" card slot).
+component DiskActivityCard inherits Card {
+    in property <[DiskProcRow]> rows;
+    in property <[image]> icons;
 
     VerticalLayout {
         padding: 20px;
-        spacing: 12px;
+        spacing: 10px;
         HorizontalLayout {
             spacing: 10px;
-            VerticalLayout { alignment: center; Icon { glyph: Icons.terminal; size: 18px; } }
-            Text { text: "Run new task"; font-size: 16px; font-weight: 500; color: Theme.text; vertical-alignment: center; }
+            VerticalLayout { alignment: center; Icon { glyph: Icons.disk; size: 18px; } }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text { text: "Disk activity"; font-size: 16px; font-weight: 500; color: Theme.text; }
+                Text { text: "Processes reading and writing the most"; font-size: 12px; color: Theme.text-2; }
+            }
         }
-        Rectangle {
+        HorizontalLayout {
+            padding-left: 38px;
+            Text { horizontal-stretch: 1; text: "Process"; font-size: 12px; color: Theme.text-2; }
+            Text { width: 92px; text: "Read"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+            Text { width: 92px; text: "Write"; font-size: 12px; color: Theme.text-2; horizontal-alignment: right; }
+        }
+        if root.rows.length == 0: Text {
             vertical-stretch: 1;
-            HorizontalLayout {
-                alignment: start;
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        background: Theme.tile;
-                        border-radius: Theme.radius-tile;
-                        HorizontalLayout {
-                            padding: 14px;
-                            Text {
-                                text: "Type a command and press Enter.\nIt runs as " + root.user-name + ", detached from TaskMonitor.";
-                                font-size: 12.5px;
-                                color: Theme.text-2;
-                                wrap: word-wrap;
-                            }
-                        }
-                    }
-                }
-            }
+            text: "No disk activity right now";
+            font-size: 13px;
+            color: Theme.text-2;
+            horizontal-alignment: center;
+            vertical-alignment: center;
         }
-        Rectangle {
-            height: 52px;
-            border-radius: self.height / 2;
-            background: Theme.tile;
-            HorizontalLayout {
-                padding-left: 18px;
-                padding-right: 6px;
-                spacing: 8px;
-                Rectangle {
-                    horizontal-stretch: 1;
-                    input := TextInput {
-                        width: 100%;
-                        height: 100%;
-                        vertical-alignment: center;
-                        font-size: 13.5px;
-                        color: Theme.text;
-                        font-family: Theme.mono;
-                        accessible-label: "Command to run";
-                        accepted => {
-                            root.run(self.text);
-                            self.text = "";
-                        }
-                    }
-                    if input.text == "": Text {
-                        x: 0;
-                        text: "Run a command…";
-                        font-size: 13.5px;
-                        color: Theme.text-2;
-                    }
-                }
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 40px;
-                        height: 40px;
-                        border-radius: 20px;
-                        background: Theme.text;
-                        Icon { glyph: Icons.send; size: 16px; tint: Theme.card; }
-                        TouchArea {
-                            mouse-cursor: pointer;
-                            clicked => {
-                                root.run(input.text);
-                                input.text = "";
-                            }
-                        }
-                    }
-                }
+        for row in root.rows: HorizontalLayout {
+            height: 30px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                AppIcon { icons: root.icons; icon: row.icon; initials: row.initials; tone: Theme.badges[row.tone]; size: 24px; }
             }
+            Text { horizontal-stretch: 1; text: row.name; font-size: 13px; color: Theme.text; vertical-alignment: center; overflow: elide; }
+            Text { width: 92px; text: row.read; font-size: 12.5px; font-family: Theme.mono; color: Theme.text; horizontal-alignment: right; vertical-alignment: center; }
+            Text { width: 92px; text: row.write; font-size: 12.5px; font-family: Theme.mono; color: Theme.text; horizontal-alignment: right; vertical-alignment: center; }
+        }
+        if root.rows.length > 0: Rectangle { vertical-stretch: 1; }
+        Text {
+            text: "Only your own processes: Linux keeps other users' disk figures private.";
+            font-size: 11px;
+            color: Theme.text-2;
+            wrap: word-wrap;
         }
     }
 }
@@ -425,7 +391,8 @@ export component PerformancePage inherits VerticalLayout {
     in property <[DeviceView]> nets;
     in property <[DeviceView]> gpus;
     in-out property <int> tab: 0;
-    callback run-command(string);
+    in property <[DiskProcRow]> disk-procs;
+    in property <[image]> icons;
     callback tab-changed(int);
     callback open-users();
 
@@ -498,10 +465,10 @@ export component PerformancePage inherits VerticalLayout {
                 devices: root.gpus;
                 selected <=> root.gpu-index;
             }
-            RunTaskCard {
+            DiskActivityCard {
                 horizontal-stretch: 1.1;
-                user-name: root.user-name;
-                run(cmd) => { root.run-command(cmd); }
+                rows: root.disk-procs;
+                icons: root.icons;
             }
             SystemCard {
                 width: 230px;

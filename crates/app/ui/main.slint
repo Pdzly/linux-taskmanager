@@ -8,14 +8,14 @@ import "../fonts/lucide-subset.ttf";
 
 import { Theme, Page } from "theme.slint";
 import { Palette } from "std-widgets.slint";
-import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow } from "types.slint";
-export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow }
+import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DiskProcRow } from "types.slint";
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DiskProcRow }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
 import { ProcessesPage } from "pages/processes.slint";
 import { DetailsPage } from "pages/details.slint";
-import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast } from "dialogs.slint";
+import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast, RunTaskDialog } from "dialogs.slint";
 import { ServicesPage } from "pages/services.slint";
 import { StartupPage } from "pages/startup.slint";
 import { UsersPage } from "pages/users.slint";
@@ -48,6 +48,7 @@ export component MainWindow inherits Window {
     callback perf-tab-changed(int);
     // App icons, rendered once in Rust; rows refer to them by index.
     in property <[image]> app-icons;
+    in property <[DiskProcRow]> disk-procs;
     in property <[ProcRow]> proc-rows;
     in property <[DetailRow]> detail-rows;
     in property <ProcTotals> proc-totals;
@@ -96,6 +97,8 @@ export component MainWindow inherits Window {
     in-out property <string> toast;
     in property <string> props-title;
     in property <[Metric]> props;
+    in property <string> props-text;
+    property <bool> run-open;
     in-out property <bool> props-open;
     in property <string> affinity-title;
     in property <[bool]> affinity-cpus;
@@ -108,6 +111,14 @@ export component MainWindow inherits Window {
     callback affinity-query(string);
     callback affinity-all();
     callback affinity-apply(string);
+
+    // Slint has no clipboard API; a hidden text field's copy() reaches the system clipboard.
+    function copy-text(text: string) {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+        root.toast = "Copied to the clipboard";
+    }
 
     function go(p: Page) {
         root.page = p;
@@ -139,6 +150,7 @@ export component MainWindow inherits Window {
             }
             if event.text == Key.Escape {
                 root.confirm-action = "";
+                root.run-open = false;
                 root.props-open = false;
                 root.affinity-open = false;
                 return accept;
@@ -213,9 +225,11 @@ export component MainWindow inherits Window {
                         root.page = Page.users;
                         root.page-changed(Page.users);
                     }
-                    run-command(cmd) => { root.run-command(cmd); }
+                    disk-procs: root.disk-procs;
+                    icons: root.app-icons;
                 }
                 if root.page == Page.processes: ProcessesPage {
+                    run-task => { root.run-open = true; }
                     icons: root.app-icons;
                     rows: root.proc-rows;
                     totals: root.proc-totals;
@@ -328,6 +342,8 @@ export component MainWindow inherits Window {
         height: root.height;
         title: root.props-title;
         facts: root.props;
+        all-text: root.props-text;
+        copy(text) => { root.copy-text(text); }
         dismiss => { root.props-open = false; }
     }
 
@@ -342,6 +358,23 @@ export component MainWindow inherits Window {
             root.affinity-apply(root.affinity-key);
             root.affinity-open = false;
         }
+    }
+
+    if root.run-open: RunTaskDialog {
+        width: root.width;
+        height: root.height;
+        user-name: root.user-name;
+        dismiss => { root.run-open = false; }
+        run(cmd) => {
+            root.run-command(cmd);
+            root.run-open = false;
+        }
+    }
+
+    clipboard := TextInput {
+        visible: false;
+        width: 0;
+        height: 0;
     }
 
     if root.toast != "": Toast {

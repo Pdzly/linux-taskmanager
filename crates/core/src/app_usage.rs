@@ -135,6 +135,7 @@ mod tests {
             memory: 0,
             read_bps: 1000.0,
             write_bps: 0.0,
+            io_total: None,
             threads: 1,
             nice: 0,
             efficiency: false,

@@ -204,6 +204,28 @@ pub fn apply(ui: &MainWindow, rows: Rows) {
     sync(ui.get_detail_rows(), rows.details, |m| ui.set_detail_rows(m));
 }
 
+/// The busiest disk users for the Performance page: up to five processes with any
+/// read or write activity, busiest first.
+pub fn disk_rows(procs: &[Process], icons: &mut IconStore) -> Vec<crate::DiskProcRow> {
+    let mut busy: Vec<&Process> = procs.iter().filter(|p| p.read_bps + p.write_bps >= 1024.0).collect();
+    busy.sort_by(|a, b| (b.read_bps + b.write_bps).total_cmp(&(a.read_bps + a.write_bps)));
+    let rate = |bps: f64| {
+        let (v, u) = crate::format::byte_rate(bps);
+        format!("{v} {u}")
+    };
+    busy.into_iter()
+        .take(5)
+        .map(|p| crate::DiskProcRow {
+            name: p.name.as_ref().into(),
+            initials: initials(&p.name).into(),
+            tone: tone(&p.name),
+            icon: icons.slot(p.icon.as_ref()),
+            read: rate(p.read_bps).into(),
+            write: rate(p.write_bps).into(),
+        })
+        .collect()
+}
+
 #[derive(Default)]
 pub struct Rows {
     pub procs: Vec<ProcRow>,
@@ -243,6 +265,9 @@ fn detail_row(p: &Process) -> DetailRow {
         threads: p.threads.to_string().into(),
         nice: p.nice.to_string().into(),
         cmd: p.cmdline.as_ref().into(),
+        // "—" where the kernel keeps another user's I/O private.
+        read: p.io_total.map_or_else(|| "—".into(), |_| format!("{} MB/s", mb(p.read_bps))).into(),
+        write: p.io_total.map_or_else(|| "—".into(), |_| format!("{} MB/s", mb(p.write_bps))).into(),
         suspended: p.state == 'T',
         efficiency: p.efficiency,
     }
@@ -256,6 +281,8 @@ fn cmp_procs(a: &Process, b: &Process, column: &str) -> Ordering {
         "disk" => (a.read_bps + a.write_bps).total_cmp(&(b.read_bps + b.write_bps)),
         "gpu" => a.gpu.total_cmp(&b.gpu),
         "threads" => a.threads.cmp(&b.threads),
+        "read" => a.read_bps.total_cmp(&b.read_bps),
+        "write" => a.write_bps.total_cmp(&b.write_bps),
         "nice" => a.nice.cmp(&b.nice),
         "user" => a.user.cmp(&b.user),
         "status" => status_long(a.state).cmp(status_long(b.state)),
@@ -354,6 +381,7 @@ mod tests {
             memory: 1 << 20,
             read_bps: 0.0,
             write_bps: 0.0,
+            io_total: None,
             threads: 1,
             nice: 0,
             efficiency: false,

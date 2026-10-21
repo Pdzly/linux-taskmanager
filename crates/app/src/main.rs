@@ -491,7 +491,11 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                 tick += 1;
                 // App history needs process samples even when no process page is open,
                 // but every 5th tick is enough: it accumulates rates times elapsed time.
-                let sample_procs = shows_procs(page) || (usage_log.is_some() && tick.is_multiple_of(5));
+                // The Performance page's Disk activity card needs processes too; every
+                // 2nd tick is plenty for it (rates average over the time between samples).
+                let sample_procs = shows_procs(page)
+                    || (page == Page::Performance && tick.is_multiple_of(2))
+                    || (usage_log.is_some() && tick.is_multiple_of(5));
                 if sample_procs {
                     let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
                     last.1 = ps.sample();
@@ -507,6 +511,14 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                 {
                     let _ = log.save(&history_path);
                     last_save = std::time::Instant::now();
+                }
+                if sample_procs && page == Page::Performance {
+                    let rows = processes::disk_rows(&last.1, &mut icons);
+                    let new_icons = icons.take_pending();
+                    let _ = ui.upgrade_in_event_loop(move |ui| {
+                        app_icons::apply(&ui, new_icons);
+                        bridge::sync(ui.get_disk_procs(), rows, |m| ui.set_disk_procs(m));
+                    });
                 }
                 if page == Page::History {
                     push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
@@ -542,11 +554,15 @@ fn run_action(ui: &slint::Weak<MainWindow>, action: &str, key: &str, procs: Vec<
 fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
     let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
     let title = format!("{} (PID {pid})", actions::name_for_key(&format!("pid:{pid}"), procs));
-    let facts: Vec<Metric> = taskmonitor_core::actions::info(pid)
+    let info = taskmonitor_core::actions::info(pid);
+    let all_text: String =
+        std::iter::once(title.clone()).chain(info.iter().map(|(l, v)| format!("{l}: {v}"))).collect::<Vec<_>>().join("\n");
+    let facts: Vec<Metric> = info
         .into_iter()
         .map(|(label, value)| Metric { label: label.into(), value: value.into(), unit: "".into() })
         .collect();
     let _ = ui.upgrade_in_event_loop(move |ui| {
+        ui.set_props_text(all_text.into());
         ui.set_props_title(title.into());
         ui.set_props(ModelRc::new(VecModel::from(facts)));
         ui.set_props_open(true);

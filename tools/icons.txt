@@ -28,3 +28,5 @@ chevron-down   chevron-down
 chevron-up     chevron-up
 chevron-right  chevron-right
 top-bar        panel-top
+copy           copy
+check          check

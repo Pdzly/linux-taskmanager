@@ -221,27 +221,124 @@ export component ConfirmDialog inherits Modal {
     }
 }
 
+// Small icon button that copies text and briefly shows a check mark.
+component CopyButton inherits Rectangle {
+    in property <string> label: "Copy";
+    callback copy();
+    property <bool> done;
+
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: ta.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.copy(); }
+
+    Icon { glyph: root.done ? Icons.check : Icons.copy; size: 14px; tint: root.done ? Theme.ok : Theme.text-2; }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.copy();
+            root.done = true;
+            reset.running = true;
+        }
+    }
+    reset := Timer {
+        interval: 1.2s;
+        running: false;
+        triggered => {
+            root.done = false;
+            self.running = false;
+        }
+    }
+}
+
 export component PropertiesSheet inherits Modal {
     in property <string> title;
     in property <[Metric]> facts;
-    card-width: 620px;
+    // Every fact as "Label: value" lines, for Copy all.
+    in property <string> all-text;
+    callback copy(string);
+    card-width: 660px;
 
     Text { text: root.title; font-size: 18px; font-weight: 500; color: Theme.text; }
-    for fact in root.facts: HorizontalLayout {
-        spacing: 16px;
-        Text { width: 150px; text: fact.label; font-size: 12.5px; color: Theme.text-2; }
-        Text {
-            horizontal-stretch: 1;
-            text: fact.value;
-            font-size: 12.5px;
-            font-family: Theme.mono;
-            color: Theme.text;
-            wrap: char-wrap;
+    // Tight rows so the sheet fits the window at its 720 px minimum height.
+    VerticalLayout {
+        spacing: 0px;
+        for fact in root.facts: HorizontalLayout {
+            min-height: 28px;
+            spacing: 12px;
+            Text { width: 150px; text: fact.label; font-size: 12.5px; color: Theme.text-2; vertical-alignment: center; }
+            Text {
+                horizontal-stretch: 1;
+                text: fact.value;
+                font-size: 12.5px;
+                font-family: Theme.mono;
+                color: Theme.text;
+                wrap: char-wrap;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                alignment: start;
+                CopyButton { label: "Copy " + fact.label; copy => { root.copy(fact.value); } }
+            }
+        }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        Button { text: "Copy all"; clicked => { root.copy(root.all-text); } }
+        Rectangle { horizontal-stretch: 1; }
+        Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+    }
+}
+
+// Windows' "Run new task": start a command, detached from TaskMonitor.
+export component RunTaskDialog inherits Modal {
+    in property <string> user-name;
+    callback run(string);
+    card-width: 520px;
+
+    Text { text: "Run new task"; font-size: 18px; font-weight: 500; color: Theme.text; }
+    Text {
+        text: "Type a command and press Enter. It runs as " + root.user-name + ", separate from TaskMonitor.";
+        font-size: 13.5px;
+        color: Theme.text-2;
+        wrap: word-wrap;
+    }
+    Rectangle {
+        height: 48px;
+        border-radius: self.height / 2;
+        background: Theme.tile;
+        HorizontalLayout {
+            padding-left: 18px;
+            padding-right: 18px;
+            Rectangle {
+                input := TextInput {
+                    width: 100%;
+                    height: 100%;
+                    vertical-alignment: center;
+                    font-size: 13.5px;
+                    color: Theme.text;
+                    font-family: Theme.mono;
+                    accessible-label: "Command to run";
+                    accepted => { root.run(self.text); }
+                    init => { self.focus(); }
+                }
+                if input.text == "": Text {
+                    x: 0;
+                    text: "e.g. gnome-text-editor";
+                    font-size: 13.5px;
+                    color: Theme.text-2;
+                }
+            }
         }
     }
     HorizontalLayout {
         alignment: end;
-        Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+        spacing: 8px;
+        Button { text: "Cancel"; clicked => { root.dismiss(); } }
+        Button { text: "Run"; primary: true; enabled: input.text != ""; clicked => { root.run(input.text); } }
     }
 }
 

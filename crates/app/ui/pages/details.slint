@@ -13,6 +13,7 @@ global DCols {
     out property <length> user: 110px;
     out property <length> cpu: 72px;
     out property <length> mem: 100px;
+    out property <length> io: 92px;
     out property <length> threads: 84px;
     out property <length> nice: 64px;
 }
@@ -44,6 +45,8 @@ component DRow inherits Rectangle {
         Cell { width: DCols.user; text: root.item.user; color: Theme.text-2; }
         Cell { width: DCols.cpu; text: root.item.cpu; font-family: Theme.mono; horizontal-alignment: right; }
         Cell { width: DCols.mem; text: root.item.mem; font-family: Theme.mono; horizontal-alignment: right; }
+        Cell { width: DCols.io; text: root.item.read; font-family: Theme.mono; horizontal-alignment: right; }
+        Cell { width: DCols.io; text: root.item.write; font-family: Theme.mono; horizontal-alignment: right; }
         Cell { width: DCols.threads; text: root.item.threads; font-family: Theme.mono; horizontal-alignment: right; }
         Cell { width: DCols.nice; text: root.item.nice; font-family: Theme.mono; horizontal-alignment: right; }
         Rectangle { width: 24px; }
@@ -120,6 +123,8 @@ export component DetailsPage inherits Card {
             HeaderCell { width: DCols.user; inset: 0px; title: "User"; column: "user"; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
             HeaderCell { width: DCols.cpu; inset: 0px; title: "CPU %"; column: "cpu"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
             HeaderCell { width: DCols.mem; inset: 0px; title: "Memory"; column: "mem"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.io; inset: 0px; title: "Disk read"; column: "read"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
+            HeaderCell { width: DCols.io; inset: 0px; title: "Disk write"; column: "write"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
             HeaderCell { width: DCols.threads; inset: 0px; title: "Threads"; column: "threads"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
             HeaderCell { width: DCols.nice; inset: 0px; title: "Nice"; column: "nice"; numeric: true; sort-column: root.sort-column; ascending: root.ascending; sort(c) => { root.sort(c); } }
             Rectangle { width: 24px; }

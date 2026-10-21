@@ -1,6 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card, Icon, Badge, AppIcon } from "../components.slint";
+import { Card, Icon, Badge, AppIcon, IconButton } from "../components.slint";
 import { Icons } from "../icons.slint";
 import { SearchField, HeaderCell, HeatCell, Cell, ProcessMenu } from "../table.slint";
 import { ProcessActionButton } from "../dialogs.slint";
@@ -134,6 +134,7 @@ export component ProcessesPage inherits Card {
     callback request(string, string);
     callback properties(string);
     callback affinity(string);
+    callback run-task();
 
     VerticalLayout {
         padding: 20px;
@@ -149,6 +150,17 @@ export component ProcessesPage inherits Card {
                 Text { text: root.totals.count; font-size: 12px; color: Theme.text-2; }
             }
             Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                IconButton {
+                    icon: Icons.terminal;
+                    label: "Run new task";
+                    Tooltip { text: @markdown("\{parent.label}"); }
+                    size: 40px;
+                    icon-size: 18px;
+                    clicked => { root.run-task(); }
+                }
+            }
             VerticalLayout {
                 alignment: center;
                 ProcessActionButton {

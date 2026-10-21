@@ -97,6 +97,8 @@ export struct DetailRow {
     threads: string,
     nice: string,
     cmd: string,
+    read: string,
+    write: string,
     suspended: bool,
     efficiency: bool,
 }
@@ -148,4 +150,14 @@ export struct HistoryRow {
     read: string,
     write: string,
     gpu: string,
+}
+
+// A process on the Performance page's Disk activity card.
+export struct DiskProcRow {
+    name: string,
+    initials: string,
+    tone: int,
+    icon: int,
+    read: string,
+    write: string,
 }
