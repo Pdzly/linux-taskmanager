@@ -1,4 +1,5 @@
 mod actions;
+mod app_icons;
 mod bench;
 mod bridge;
 mod format;
@@ -289,9 +290,20 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
             // The first tick comes quickly so the window doesn't sit on placeholders.
             let mut wait = Some(Duration::from_millis(250));
 
-            let push_rows = |view: &processes::View, page: Page, last: &(Snapshot, Vec<Process>), gpu_total: f32| {
-                let rows = view.build(page, &last.1, &last.0, gpu_total);
-                ui.upgrade_in_event_loop(move |ui| processes::apply(&ui, rows)).is_ok()
+            let mut icons = app_icons::IconStore::new();
+            let mut registry: Option<taskmonitor_core::apps::Registry> = None;
+            let push_rows = |view: &processes::View,
+                             page: Page,
+                             last: &(Snapshot, Vec<Process>),
+                             gpu_total: f32,
+                             icons: &mut app_icons::IconStore| {
+                let rows = view.build(page, &last.1, &last.0, gpu_total, icons);
+                let new_icons = icons.take_pending();
+                ui.upgrade_in_event_loop(move |ui| {
+                    app_icons::apply(&ui, new_icons);
+                    processes::apply(&ui, rows);
+                })
+                .is_ok()
             };
 
             loop {
@@ -319,7 +331,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                             Cmd::Page(p) => {
                                 page = p;
                                 if p == Page::Startup {
-                                    push_startup(&ui);
+                                    push_startup(&ui, &mut icons);
                                 }
                                 if p == Page::Services {
                                     let svc = services.get_or_insert_with(Services::new);
@@ -370,7 +382,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                     Ok(()) => None,
                                     Err(e) => Some(format!("Couldn't change startup setting: {e}")),
                                 };
-                                push_startup(&ui);
+                                push_startup(&ui, &mut icons);
                                 if let Some(msg) = msg {
                                     let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
                                 }
@@ -386,7 +398,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                 } else if !on && let Some(log) = usage_log.take() {
                                     let _ = log.save(&history_path);
                                 }
-                                push_history(&ui, usage_log.as_ref());
+                                push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 continue;
                             }
                             Cmd::ClearHistory => {
@@ -395,7 +407,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                     let _ = log.save(&history_path);
                                     usage_log = Some(log);
                                 }
-                                push_history(&ui, usage_log.as_ref());
+                                push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 continue;
                             }
                             Cmd::Quit => {
@@ -419,7 +431,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                             }
                             Cmd::Interval(_) => unreachable!(),
                         }
-                        if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
+                        if shows_procs(page) && !push_rows(&view, page, &last, gpu_total, &mut icons) {
                             break;
                         }
                         continue;
@@ -459,9 +471,9 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                     last_save = std::time::Instant::now();
                 }
                 if page == Page::History {
-                    push_history(&ui, usage_log.as_ref());
+                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                 }
-                if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
+                if shows_procs(page) && !push_rows(&view, page, &last, gpu_total, &mut icons) {
                     break;
                 }
                 if page == Page::Services {
@@ -535,9 +547,13 @@ fn push_services(ui: &slint::Weak<MainWindow>, svc: &Services, bus: Bus, filter:
     list
 }
 
-fn push_startup(ui: &slint::Weak<MainWindow>) {
-    let rows = system_pages::startup_rows(&taskmonitor_core::startup::list());
-    let _ = ui.upgrade_in_event_loop(move |ui| bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m)));
+fn push_startup(ui: &slint::Weak<MainWindow>, icons: &mut app_icons::IconStore) {
+    let rows = system_pages::startup_rows(&taskmonitor_core::startup::list(), icons);
+    let new_icons = icons.take_pending();
+    let _ = ui.upgrade_in_event_loop(move |ui| {
+        app_icons::apply(&ui, new_icons);
+        bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m));
+    });
 }
 
 /// systemd may show a password prompt, so this runs on its own thread with its own connection.
@@ -582,9 +598,22 @@ fn dbus_error(e: &zbus::Error) -> String {
     }
 }
 
-fn push_history(ui: &slint::Weak<MainWindow>, log: Option<&AppUsageLog>) {
-    let (rows, since) = log.map_or_else(Default::default, |l| (system_pages::history_rows(l), system_pages::since_text(l.since)));
+fn push_history(
+    ui: &slint::Weak<MainWindow>,
+    log: Option<&AppUsageLog>,
+    icons: &mut app_icons::IconStore,
+    registry: &mut Option<taskmonitor_core::apps::Registry>,
+) {
+    let (rows, since) = match log {
+        Some(l) => {
+            let apps = registry.get_or_insert_with(taskmonitor_core::apps::Registry::load);
+            (system_pages::history_rows(l, icons, apps), system_pages::since_text(l.since))
+        }
+        None => Default::default(),
+    };
+    let new_icons = icons.take_pending();
     let _ = ui.upgrade_in_event_loop(move |ui| {
+        app_icons::apply(&ui, new_icons);
         bridge::sync(ui.get_history_rows(), rows, |m| ui.set_history_rows(m));
         ui.set_history_since(since.into());
     });

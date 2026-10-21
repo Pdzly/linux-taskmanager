@@ -247,6 +247,7 @@ mod tests {
             nice: 0,
             efficiency: false,
             gpu: 0.0,
+            icon: None,
             group: Group::Background,
         }];
         assert_eq!(perform(&Action::End, "bg:sleep", &procs), "Ended sleep");

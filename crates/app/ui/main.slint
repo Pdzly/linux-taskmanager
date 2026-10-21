@@ -46,6 +46,8 @@ export component MainWindow inherits Window {
     in property <[DeviceView]> gpus;
     in-out property <int> perf-tab;
     callback perf-tab-changed(int);
+    // App icons, rendered once in Rust; rows refer to them by index.
+    in property <[image]> app-icons;
     in property <[ProcRow]> proc-rows;
     in property <[DetailRow]> detail-rows;
     in property <ProcTotals> proc-totals;
@@ -206,6 +208,7 @@ export component MainWindow inherits Window {
                     run-command(cmd) => { root.run-command(cmd); }
                 }
                 if root.page == Page.processes: ProcessesPage {
+                    icons: root.app-icons;
                     rows: root.proc-rows;
                     totals: root.proc-totals;
                     sort-column: root.sort-column;
@@ -223,6 +226,7 @@ export component MainWindow inherits Window {
                     }
                 }
                 if root.page == Page.history: HistoryPage {
+                    icons: root.app-icons;
                     rows: root.history-rows;
                     enabled: root.app-history;
                     since: root.history-since;
@@ -233,6 +237,7 @@ export component MainWindow inherits Window {
                     clear => { root.clear-history(); }
                 }
                 if root.page == Page.startup: StartupPage {
+                    icons: root.app-icons;
                     rows: root.startup-rows;
                     toggled(id, on) => { root.startup-toggled(id, on); }
                 }

@@ -139,13 +139,14 @@ mod tests {
             nice: 0,
             efficiency: false,
             gpu: 0.5,
+            icon: None,
             group,
         }
     }
 
     #[test]
     fn records_apps_only_and_round_trips() {
-        let app = Group::App(App { id: "org.web".into(), name: "Web\tBrowser".into() });
+        let app = Group::App(App { id: "org.web".into(), name: "Web\tBrowser".into(), icon: None });
         let mut log = AppUsageLog { since: 42, apps: HashMap::new() };
         // 25% of an 8-CPU machine for 2 s = 4 CPU-seconds.
         log.record(&[proc(0.25, app.clone()), proc(0.9, Group::Background)], 2.0, 8);

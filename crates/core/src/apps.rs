@@ -13,11 +13,21 @@ use std::time::{Duration, Instant};
 pub struct App {
     pub id: Arc<str>,
     pub name: Arc<str>,
+    /// `Icon=` from the desktop entry: a theme icon name or an absolute path.
+    pub icon: Option<Arc<str>>,
+}
+
+#[derive(Clone, Debug)]
+struct Entry {
+    name: Arc<str>,
+    icon: Option<Arc<str>>,
 }
 
 /// Installed `.desktop` entries by id.
 pub struct Registry {
-    apps: HashMap<String, Arc<str>>,
+    apps: HashMap<String, Entry>,
+    /// Program file name from `Exec=` -> icon, to give background processes an icon.
+    by_program: HashMap<String, Arc<str>>,
     scanned: Instant,
 }
 
@@ -33,6 +43,7 @@ impl Default for Registry {
 impl Registry {
     pub fn load() -> Self {
         let mut apps = HashMap::new();
+        let mut by_program = HashMap::new();
         for dir in desktop_dirs() {
             let Ok(entries) = std::fs::read_dir(&dir) else { continue };
             for entry in entries.flatten() {
@@ -45,12 +56,26 @@ impl Registry {
                 if apps.contains_key(id) {
                     continue;
                 }
-                if let Some(name) = std::fs::read_to_string(&path).ok().and_then(|t| parse_desktop_name(&t)) {
-                    apps.insert(id.to_owned(), Arc::from(name));
+                let Ok(text) = std::fs::read_to_string(&path) else { continue };
+                let Some(name) = parse_desktop_name(&text) else { continue };
+                let icon: Option<Arc<str>> = desktop_value(&text, "Icon").filter(|i| !i.is_empty()).map(Arc::from);
+                if let (Some(icon), Some(program)) = (&icon, desktop_value(&text, "Exec").and_then(|e| program_name(&e))) {
+                    by_program.entry(program).or_insert_with(|| icon.clone());
                 }
+                apps.insert(id.to_owned(), Entry { name: Arc::from(name), icon });
             }
         }
-        Self { apps, scanned: Instant::now() }
+        Self { apps, by_program, scanned: Instant::now() }
+    }
+
+    /// Icon of the app with this desktop id (for App history, which stores ids).
+    pub fn icon_for_id(&self, id: &str) -> Option<Arc<str>> {
+        self.apps.get(id).and_then(|e| e.icon.clone())
+    }
+
+    /// Icon of the desktop app whose `Exec=` runs this program ("nautilus" -> its icon).
+    pub fn icon_for_program(&self, program: &str) -> Option<Arc<str>> {
+        self.by_program.get(program).cloned()
     }
 
     /// The app a cgroup path belongs to, if it was launched as a desktop app.
@@ -71,16 +96,17 @@ impl Registry {
     }
 
     fn lookup(&self, candidates: &[String]) -> Option<App> {
+        let app = |id: &str, e: &Entry| App { id: Arc::from(id), name: e.name.clone(), icon: e.icon.clone() };
         for c in candidates {
-            if let Some((id, name)) = self.apps.get_key_value(c.as_str()) {
-                return Some(App { id: Arc::from(id.as_str()), name: name.clone() });
+            if let Some((id, e)) = self.apps.get_key_value(c.as_str()) {
+                return Some(app(id, e));
             }
         }
         // KDE scopes may use a short name ("dolphin") for "org.kde.dolphin".
         for c in candidates {
             let suffix = format!(".{c}");
-            if let Some((id, name)) = self.apps.iter().find(|(id, _)| id.ends_with(&suffix)) {
-                return Some(App { id: Arc::from(id.as_str()), name: name.clone() });
+            if let Some((id, e)) = self.apps.iter().find(|(id, _)| id.ends_with(&suffix)) {
+                return Some(app(id, e));
             }
         }
         None
@@ -97,6 +123,37 @@ fn desktop_dirs() -> Vec<PathBuf> {
         .filter(|d| !d.is_empty())
         .map(|d| PathBuf::from(d).join("applications"))
         .collect()
+}
+
+/// The unlocalized value of `key` in the `[Desktop Entry]` group.
+pub fn desktop_value(text: &str, key: &str) -> Option<String> {
+    let mut in_entry = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            in_entry = line == "[Desktop Entry]";
+        } else if in_entry
+            && let Some((k, v)) = line.split_once('=')
+            && k.trim() == key
+        {
+            return Some(v.trim().to_owned());
+        }
+    }
+    None
+}
+
+/// File name of the program an `Exec=` line starts ("/usr/bin/nautilus --new-window" ->
+/// "nautilus"). None for launchers like `env`, `flatpak` or `sh`, which say nothing
+/// about the process that ends up running.
+pub fn program_name(exec: &str) -> Option<String> {
+    let exec = exec.trim();
+    let first = match exec.strip_prefix('"') {
+        Some(rest) => rest.split('"').next()?,
+        None => exec.split_whitespace().next()?,
+    };
+    let name = first.rsplit('/').next()?;
+    let launcher = matches!(name, "env" | "flatpak" | "sh" | "bash" | "snap" | "gtk-launch" | "pkexec" | "sudo");
+    (!name.is_empty() && !launcher).then(|| name.to_owned())
 }
 
 /// The unlocalized `Name=` of the `[Desktop Entry]` group.
@@ -183,6 +240,14 @@ mod tests {
         assert_eq!(candidate_ids(&format!("{base}app-firefox@autostart.service"))[0], "firefox");
         assert!(candidate_ids(&format!("{base}vte-spawn-1234.scope")).is_empty());
         assert!(candidate_ids("/system.slice/cron.service").is_empty());
+    }
+
+    #[test]
+    fn program_names_from_exec() {
+        assert_eq!(program_name("/usr/bin/nautilus --new-window %U").as_deref(), Some("nautilus"));
+        assert_eq!(program_name("\"/opt/Brave Browser/brave\"").as_deref(), Some("brave"));
+        assert_eq!(program_name("env GDK_BACKEND=x11 foo"), None);
+        assert_eq!(program_name("flatpak run org.x.Y"), None);
     }
 
     #[test]

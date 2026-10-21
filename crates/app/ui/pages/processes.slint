@@ -1,6 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card, Icon, Badge } from "../components.slint";
+import { Card, Icon, Badge, AppIcon } from "../components.slint";
 import { Icons } from "../icons.slint";
 import { SearchField, HeaderCell, HeatCell, Cell, ProcessMenu } from "../table.slint";
 import { ProcessActionButton } from "../dialogs.slint";
@@ -14,6 +14,7 @@ global Cols {
 
 component Row inherits Rectangle {
     in property <ProcRow> item;
+    in property <[image]> icons;
     in property <bool> selected;
     callback select();
     callback toggle();
@@ -75,8 +76,10 @@ component Row inherits Rectangle {
             }
             if root.item.kind == 1: VerticalLayout {
                 alignment: center;
-                Badge {
-                    text: root.item.initials;
+                AppIcon {
+                    icons: root.icons;
+                    icon: root.item.icon;
+                    initials: root.item.initials;
                     tone: Theme.badges[root.item.tone];
                     size: 28px;
                 }
@@ -119,6 +122,7 @@ component Row inherits Rectangle {
 
 export component ProcessesPage inherits Card {
     in property <[ProcRow]> rows;
+    in property <[image]> icons;
     in property <ProcTotals> totals;
     in property <string> sort-column;
     in property <bool> ascending;
@@ -229,6 +233,7 @@ export component ProcessesPage inherits Card {
             vertical-stretch: 1;
             for row in root.rows: Row {
                 item: row;
+                icons: root.icons;
                 selected: row.key == root.selected-key;
                 select => { root.selected-key = row.key; }
                 toggle => { root.toggle(row.key); }

@@ -1,10 +1,11 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card, Badge, Switch, Chip } from "../components.slint";
+import { Card, Badge, Switch, Chip, AppIcon } from "../components.slint";
 import { StartupRow } from "../types.slint";
 
 export component StartupPage inherits Card {
     in property <[StartupRow]> rows;
+    in property <[image]> icons;
     callback toggled(string, bool);
 
     VerticalLayout {
@@ -36,7 +37,7 @@ export component StartupPage inherits Card {
                     spacing: 14px;
                     VerticalLayout {
                         alignment: center;
-                        Badge { text: row.initials; tone: Theme.badges[row.tone]; size: 34px; }
+                        AppIcon { icons: root.icons; icon: row.icon; initials: row.initials; tone: Theme.badges[row.tone]; size: 34px; }
                     }
                     VerticalLayout {
                         alignment: center;

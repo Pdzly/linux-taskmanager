@@ -43,6 +43,8 @@ pub struct Process {
     pub efficiency: bool,
     /// Busiest GPU engine, `0.0..=1.0`. Filled in from [`crate::GpuSampler`].
     pub gpu: f32,
+    /// Icon from the process's desktop entry (theme name or path), if it has one.
+    pub icon: Option<Arc<str>>,
     pub group: Group,
 }
 
@@ -120,6 +122,7 @@ struct Entry {
     cmdline: Arc<str>,
     user: Arc<str>,
     group: Group,
+    icon: Option<Arc<str>>,
     ticks: u64,
     io: Option<(u64, u64)>,
     /// `/proc/[pid]/io` is only readable for our own processes; don't retry once denied.
@@ -244,6 +247,7 @@ impl ProcessSampler {
             nice: stat.nice,
             efficiency: stat.efficiency,
             gpu: 0.0,
+            icon: e.icon.clone(),
             group: e.group.clone(),
         })
     }
@@ -265,12 +269,18 @@ impl ProcessSampler {
         } else {
             Group::System
         };
+        let icon = match &group {
+            Group::App(app) => app.icon.clone(),
+            Group::Kernel => None,
+            _ => self.apps.icon_for_program(&name),
+        };
         Entry {
             start_time: stat.start_time,
             name: Arc::from(name),
             cmdline: Arc::from(cmdline.replace('\0', " ")),
             user: self.user_name(uid),
             group,
+            icon,
             ticks: stat.ticks,
             io: None,
             io_denied: false,

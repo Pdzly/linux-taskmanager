@@ -320,3 +320,27 @@ export component Switch inherits Rectangle {
         clicked => { root.toggled(); }
     }
 }
+
+// An app's icon when it has one, otherwise its initials badge.
+export component AppIcon inherits Rectangle {
+    in property <[image]> icons;
+    // Index into `icons`, or -1 for none.
+    in property <int> icon: -1;
+    in property <string> initials;
+    in property <color> tone;
+    in property <length> size: 28px;
+
+    width: size;
+    height: size;
+    if root.icon >= 0: Image {
+        source: root.icons[root.icon];
+        width: root.size;
+        height: root.size;
+        image-rendering: smooth;
+    }
+    if root.icon < 0: Badge {
+        text: root.initials;
+        tone: root.tone;
+        size: root.size;
+    }
+}

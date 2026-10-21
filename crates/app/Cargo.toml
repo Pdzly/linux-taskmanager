@@ -8,6 +8,9 @@ license.workspace = true
 
 [dependencies]
 taskmonitor-core = { path = "../core" }
+# Renders app icons (already built into Slint; this exposes it). No text/system fonts:
+# icons don't need them, and loading the system font database is slow.
+resvg = { version = "0.48.1", default-features = false }
 # Software renderer only: the OpenGL path loads ~100 MB of Mesa/NVIDIA driver libraries
 # (and can wake a sleeping dGPU), while this UI only repaints small regions once a second.
 slint = { version = "1.18", default-features = false, features = [
@@ -101,6 +104,4 @@ profiling = ["dep:pprof"]
 [build-dependencies]
 slint-build = "1.18"
 
-[dev-dependencies]
-resvg = "0.48.1"
 
