@@ -6,6 +6,7 @@ mod format;
 mod processes;
 mod settings;
 mod system_pages;
+mod tray;
 
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
@@ -49,6 +50,18 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_refresh_index(prefs.refresh);
     ui.set_on_top(prefs.always_on_top);
     ui.set_app_history(prefs.app_history);
+    ui.set_top_bar_stats(prefs.top_bar_stats);
+    if prefs.top_bar_stats {
+        send(Cmd::TopBar(true));
+    }
+    ui.on_top_bar_toggled({
+        let send = send.clone();
+        let ui = ui.as_weak();
+        move |on| {
+            save_settings(&ui.unwrap());
+            send(Cmd::TopBar(on));
+        }
+    });
     let start = match prefs.start_page.as_str() {
         "performance" => (1, Page::Performance),
         "details" => (2, Page::Details),
@@ -226,6 +239,7 @@ fn save_settings(ui: &MainWindow) {
         start_page: ["processes", "performance", "details"][ui.get_start_page().clamp(0, 2) as usize].into(),
         always_on_top: ui.get_on_top(),
         app_history: ui.get_app_history(),
+        top_bar_stats: ui.get_top_bar_stats(),
     };
     if let Err(e) = prefs.save() {
         ui.set_toast(format!("Couldn't save settings: {e}").into());
@@ -257,6 +271,8 @@ enum Cmd {
     SessionAct(SharedString, SharedString),
     History(bool),
     ClearHistory,
+    /// Show (true) or remove CPU / RAM / GPU in the desktop's top bar.
+    TopBar(bool),
     Quit,
 }
 
@@ -292,6 +308,7 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
 
             let mut icons = app_icons::IconStore::new();
             let mut registry: Option<taskmonitor_core::apps::Registry> = None;
+            let mut top_bar: Option<tray::Tray> = None;
             let push_rows = |view: &processes::View,
                              page: Page,
                              last: &(Snapshot, Vec<Process>),
@@ -410,6 +427,23 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                 push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 continue;
                             }
+                            Cmd::TopBar(on) => {
+                                if !on {
+                                    top_bar = None;
+                                } else if top_bar.is_none() {
+                                    match tray::Tray::start(ui.clone()) {
+                                        Ok(t) => top_bar = Some(t),
+                                        Err(e) => {
+                                            let msg = format!("Can't show stats in the top bar: {e}");
+                                            let _ = ui.upgrade_in_event_loop(move |ui| {
+                                                ui.set_top_bar_stats(false);
+                                                ui.set_toast(msg.into());
+                                            });
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
                             Cmd::Quit => {
                                 if let Some(log) = &usage_log {
                                     let _ = log.save(&history_path);
@@ -446,6 +480,10 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                 let (gpus, gpu_per_pid) = gpu_sampler.sample(gpu_detail);
                 gpu_total = gpus.iter().filter_map(|g| g.usage).fold(0.0, f32::max);
                 let update = bridge::build(&snap, &gpus, &mut histories);
+                if let Some(t) = top_bar.as_mut() {
+                    let gpu = gpus.iter().filter_map(|g| g.usage).reduce(f32::max);
+                    t.set_label(tray::label(snap.cpu_usage, snap.memory.used(), gpu));
+                }
                 if ui.upgrade_in_event_loop(move |ui| bridge::apply(&ui, update)).is_err() {
                     break; // window closed
                 }

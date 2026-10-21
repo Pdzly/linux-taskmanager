@@ -12,11 +12,20 @@ pub struct Settings {
     pub start_page: String,
     pub always_on_top: bool,
     pub app_history: bool,
+    /// CPU / RAM / GPU in the desktop's top bar.
+    pub top_bar_stats: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { theme: 0, refresh: 1, start_page: "processes".into(), always_on_top: false, app_history: false }
+        Self {
+            theme: 0,
+            refresh: 1,
+            start_page: "processes".into(),
+            always_on_top: false,
+            app_history: false,
+            top_bar_stats: false,
+        }
     }
 }
 
@@ -42,6 +51,7 @@ impl Settings {
                 "start_page" => s.start_page = value.to_owned(),
                 "always_on_top" => s.always_on_top = value == "true",
                 "app_history" => s.app_history = value == "true",
+                "top_bar_stats" => s.top_bar_stats = value == "true",
                 _ => {}
             }
         }
@@ -54,8 +64,8 @@ impl Settings {
             fs::create_dir_all(dir)?;
         }
         let text = format!(
-            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\n",
-            self.theme, self.refresh, self.start_page, self.always_on_top, self.app_history
+            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\ntop_bar_stats = {}\n",
+            self.theme, self.refresh, self.start_page, self.always_on_top, self.app_history, self.top_bar_stats
         );
         fs::write(path, text)
     }

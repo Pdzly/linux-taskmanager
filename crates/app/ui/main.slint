@@ -85,6 +85,9 @@ export component MainWindow inherits Window {
     in-out property <int> start-page;
     in-out property <bool> app-history;
     callback settings-changed();
+    // CPU / RAM / GPU in the desktop's top bar (system tray).
+    in-out property <bool> top-bar-stats;
+    callback top-bar-toggled(bool);
     callback clear-history();
     in-out property <bool> on-top;
     always-on-top: root.on-top;
@@ -163,6 +166,11 @@ export component MainWindow inherits Window {
                     user-initials: root.user-initials;
                     summary: root.summary;
                     refresh-changed(i) => { root.refresh-changed(i); }
+                    top-bar-stats: root.top-bar-stats;
+                    top-bar-toggled => {
+                        root.top-bar-stats = !root.top-bar-stats;
+                        root.top-bar-toggled(root.top-bar-stats);
+                    }
                     // The quick toggle picks an explicit theme and remembers it.
                     theme-toggled => {
                         root.theme-choice = Theme.dark ? 1 : 2;

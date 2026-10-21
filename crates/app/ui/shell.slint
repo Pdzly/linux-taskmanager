@@ -67,6 +67,8 @@ export component TopBar inherits HorizontalLayout {
     in-out property <int> refresh-index: 1;
     callback refresh-changed(int);
     callback theme-toggled();
+    in property <bool> top-bar-stats;
+    callback top-bar-toggled();
     property <[string]> refresh-labels: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
 
     height: 60px;
@@ -131,6 +133,17 @@ export component TopBar inherits HorizontalLayout {
                     root.refresh-changed(root.refresh-index);
                 }
             }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        IconButton {
+            icon: Icons.top-bar;
+            label: root.top-bar-stats ? "Hide CPU, RAM and GPU from the top bar" : "Show CPU, RAM and GPU in the top bar";
+            Tooltip { text: @markdown("\{parent.label}"); }
+            size: 48px;
+            active: root.top-bar-stats;
+            clicked => { root.top-bar-toggled(); }
         }
     }
     VerticalLayout {
