@@ -9,6 +9,8 @@
     <name>anuz</name>
   </developer>
   <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/anuzdhk/linux-taskmanager</url>
+  <url type="bugtracker">https://github.com/anuzdhk/linux-taskmanager/issues</url>
   <description>
     <p>
       TaskMonitor shows everything Windows Task Manager does, for Linux: apps and
@@ -30,6 +32,11 @@
     <category>Monitor</category>
   </categories>
   <releases>
+    <release version="0.1.2" date="2026-10-21">
+      <description>
+        <p>App icons, CPU/RAM/GPU in the top bar, a Disk activity card, disk read and write columns, copyable process properties, a redesigned Settings page and an update checker.</p>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-20">
       <description>
         <p>Fixes installing the RPM on Fedora 44, adds the MIT License and an About section.</p>

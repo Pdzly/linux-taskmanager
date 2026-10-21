@@ -4413,7 +4413,7 @@ dependencies = [
 
 [[package]]
 name = "taskmonitor"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "nix 0.31.3",
  "pprof",
@@ -4427,7 +4427,7 @@ dependencies = [
 
 [[package]]
 name = "taskmonitor-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "libc",
  "nix 0.31.3",
@@ -4437,7 +4437,7 @@ dependencies = [
 
 [[package]]
 name = "taskmonitor-helper"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "taskmonitor-core",
 ]
