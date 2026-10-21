@@ -2,7 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { Card } from "../components.slint";
 import { SearchField, HeaderCell, Cell, ProcessMenu } from "../table.slint";
-import { Button } from "../dialogs.slint";
+import { ProcessActionButton } from "../dialogs.slint";
 import { DetailRow, ProcTotals } from "../types.slint";
 
 // Every process, kernel threads included, one row each (Windows' Details tab).
@@ -92,11 +92,9 @@ export component DetailsPage inherits Card {
             Rectangle { horizontal-stretch: 1; }
             VerticalLayout {
                 alignment: center;
-                Button {
-                    text: "End task";
-                    primary: true;
+                ProcessActionButton {
                     enabled: root.selected-key != "";
-                    clicked => { root.request("end", root.selected-key); }
+                    request(action) => { root.request(action, root.selected-key); }
                 }
             }
             VerticalLayout {
