@@ -219,11 +219,13 @@ export component Stat inherits VerticalLayout {
     }
 }
 
-// Card title row: label on the left, "more" button on the right.
+// Card title with an optional subtitle. Keeps the height the old "more" button gave it,
+// so card layouts don't shift.
 export component CardHeader inherits HorizontalLayout {
     in property <string> title;
     in property <string> subtitle;
 
+    min-height: 32px;
     spacing: 8px;
     VerticalLayout {
         alignment: center;
@@ -239,13 +241,6 @@ export component CardHeader inherits HorizontalLayout {
             color: Theme.text-2;
             font-size: 12px;
         }
-    }
-    Rectangle { horizontal-stretch: 1; }
-    IconButton {
-        icon: Icons.more;
-        label: "More";
-        size: 32px;
-        icon-size: 16px;
     }
 }
 
