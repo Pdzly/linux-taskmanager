@@ -10,6 +10,7 @@
   <a href="https://discord.gg/NpS9WmSW23"><img src="https://img.shields.io/badge/Join%20us%20on-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join us on Discord"></a>
   <a href="https://ko-fi.com/anujdhakal"><img src="https://img.shields.io/badge/Support%20me%20on-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support me on Ko-fi"></a>
 </p>
+<p align="center"> [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V8G5225SN8) </p>
 
 ![Processes](docs/screenshots/processes.png)
 
