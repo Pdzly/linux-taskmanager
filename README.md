@@ -9,6 +9,7 @@
 <p align="center">
   <a href="https://discord.gg/NpS9WmSW23"><img src="https://img.shields.io/badge/Join%20us%20on-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join us on Discord"></a>
 </p>
+<p>https://ko-fi.com/anujdhakal</p>
 
 ![Processes](docs/screenshots/processes.png)
 
