@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://discord.gg/NpS9WmSW23"><img src="https://img.shields.io/badge/Join%20us%20on-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join us on Discord"></a>
+  <a href="https://ko-fi.com/anujdhakal"><img src="https://img.shields.io/badge/Support%20me%20on-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support me on Ko-fi"></a>
 </p>
-
 
 ![Processes](docs/screenshots/processes.png)
 
@@ -87,6 +87,10 @@ Build every package into `dist/` (also needs `zig`, `squashfs-tools`, `cargo ins
 - UI toolkit: [Slint](https://slint.dev)
 - Font: [Mona Sans](https://github.com/github/mona-sans) (SIL Open Font License)
 - Icons: [Lucide](https://lucide.dev) (ISC License)
+
+## Support the project
+
+TaskMonitor is free and open source. If it's useful to you, you can [buy me a coffee on Ko-fi](https://ko-fi.com/anujdhakal). See [DONATE.md](DONATE.md) for other ways to help.
 
 ## License
 
