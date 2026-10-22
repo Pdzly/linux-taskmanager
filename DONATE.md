@@ -2,9 +2,7 @@
 
 TaskMonitor is free and open source (MIT). If it saves you time or you simply like it, you can support its development.
 
-<p align="center">
-  <a href="https://ko-fi.com/anujdhakal"><img src="https://img.shields.io/badge/Support%20me%20on-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support me on Ko-fi"></a>
-</p>
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V8G5225SN8)
 
 ## Donate
 
