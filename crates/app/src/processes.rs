@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashSet};
 use slint::SharedString;
 use taskmonitor_core::{Group, Process, Snapshot};
 
+use crate::app_icons::IconStore;
 use crate::bridge::sync;
 use crate::{DetailRow, MainWindow, Page, ProcRow, ProcTotals};
 
@@ -42,7 +43,7 @@ impl View {
         }
     }
 
-    pub fn build(&self, page: Page, procs: &[Process], snap: &Snapshot, gpu_total: f32) -> Rows {
+    pub fn build(&self, page: Page, procs: &[Process], snap: &Snapshot, gpu_total: f32, icons: &mut IconStore) -> Rows {
         let disk_bps: f64 = snap.disks.iter().map(|d| d.rates.read_bps + d.rates.write_bps).sum();
         let totals = ProcTotals {
             count: format!("{} processes", procs.len()).into(),
@@ -66,7 +67,7 @@ impl View {
                 list.sort_by(|a, b| self.order(cmp_procs(a, b, &self.sort)));
                 rows.details = list.into_iter().map(detail_row).collect();
             }
-            Page::Processes => rows.procs = self.process_rows(procs, &matches, &ctx),
+            Page::Processes => rows.procs = self.process_rows(procs, &matches, &ctx, icons),
             _ => {}
         }
         rows
@@ -76,7 +77,13 @@ impl View {
         if self.ascending { o } else { o.reverse() }
     }
 
-    fn process_rows(&self, procs: &[Process], matches: &dyn Fn(&Process) -> bool, ctx: &Ctx) -> Vec<ProcRow> {
+    fn process_rows(
+        &self,
+        procs: &[Process],
+        matches: &dyn Fn(&Process) -> bool,
+        ctx: &Ctx,
+        icons: &mut IconStore,
+    ) -> Vec<ProcRow> {
         // Section -> group key -> members. Apps group by app; others by process name.
         let mut sections: [BTreeMap<String, Vec<&Process>>; 3] = Default::default();
         for p in procs {
@@ -118,6 +125,7 @@ impl View {
                 let single = item.members.len() == 1;
                 rows.push(ProcRow {
                     kind: 1,
+                    icon: icons.slot(item.members.iter().find_map(|p| p.icon.as_ref())),
                     key: if single { format!("pid:{}", item.members[0].pid).into() } else { item.key.as_str().into() },
                     count: if single { SharedString::new() } else { format!("({})", item.members.len()).into() },
                     expandable: !single,
@@ -133,6 +141,7 @@ impl View {
                     for p in members {
                         rows.push(ProcRow {
                             kind: 2,
+                            icon: icons.slot(p.icon.as_ref()),
                             key: format!("pid:{}", p.pid).into(),
                             count: format!("{}", p.pid).into(),
                             status: status_short([(p.state, p.efficiency)]).into(),
@@ -195,6 +204,28 @@ pub fn apply(ui: &MainWindow, rows: Rows) {
     sync(ui.get_detail_rows(), rows.details, |m| ui.set_detail_rows(m));
 }
 
+/// The busiest disk users for the Performance page: up to five processes with any
+/// read or write activity, busiest first.
+pub fn disk_rows(procs: &[Process], icons: &mut IconStore) -> Vec<crate::DiskProcRow> {
+    let mut busy: Vec<&Process> = procs.iter().filter(|p| p.read_bps + p.write_bps >= 1024.0).collect();
+    busy.sort_by(|a, b| (b.read_bps + b.write_bps).total_cmp(&(a.read_bps + a.write_bps)));
+    let rate = |bps: f64| {
+        let (v, u) = crate::format::byte_rate(bps);
+        format!("{v} {u}")
+    };
+    busy.into_iter()
+        .take(5)
+        .map(|p| crate::DiskProcRow {
+            name: p.name.as_ref().into(),
+            initials: initials(&p.name).into(),
+            tone: tone(&p.name),
+            icon: icons.slot(p.icon.as_ref()),
+            read: rate(p.read_bps).into(),
+            write: rate(p.write_bps).into(),
+        })
+        .collect()
+}
+
 #[derive(Default)]
 pub struct Rows {
     pub procs: Vec<ProcRow>,
@@ -234,6 +265,9 @@ fn detail_row(p: &Process) -> DetailRow {
         threads: p.threads.to_string().into(),
         nice: p.nice.to_string().into(),
         cmd: p.cmdline.as_ref().into(),
+        // "—" where the kernel keeps another user's I/O private.
+        read: p.io_total.map_or_else(|| "—".into(), |_| format!("{} MB/s", mb(p.read_bps))).into(),
+        write: p.io_total.map_or_else(|| "—".into(), |_| format!("{} MB/s", mb(p.write_bps))).into(),
         suspended: p.state == 'T',
         efficiency: p.efficiency,
     }
@@ -247,6 +281,8 @@ fn cmp_procs(a: &Process, b: &Process, column: &str) -> Ordering {
         "disk" => (a.read_bps + a.write_bps).total_cmp(&(b.read_bps + b.write_bps)),
         "gpu" => a.gpu.total_cmp(&b.gpu),
         "threads" => a.threads.cmp(&b.threads),
+        "read" => a.read_bps.total_cmp(&b.read_bps),
+        "write" => a.write_bps.total_cmp(&b.write_bps),
         "nice" => a.nice.cmp(&b.nice),
         "user" => a.user.cmp(&b.user),
         "status" => status_long(a.state).cmp(status_long(b.state)),
@@ -345,10 +381,12 @@ mod tests {
             memory: 1 << 20,
             read_bps: 0.0,
             write_bps: 0.0,
+            io_total: None,
             threads: 1,
             nice: 0,
             efficiency: false,
             gpu: 0.0,
+            icon: None,
             group,
         }
     }
@@ -359,7 +397,7 @@ mod tests {
 
     #[test]
     fn groups_filters_and_expands() {
-        let app = Group::App(taskmonitor_core::apps::App { id: "org.web".into(), name: "Web".into() });
+        let app = Group::App(taskmonitor_core::apps::App { id: "org.web".into(), name: "Web".into(), icon: None });
         let procs = vec![
             proc(10, "web", 0.10, app.clone()),
             proc(11, "web-gpu", 0.30, app),
@@ -370,7 +408,7 @@ mod tests {
         let snap = Snapshot::default();
         let mut v = View::default();
 
-        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0, &mut IconStore::empty()).procs;
         assert_eq!(
             names(&rows),
             ["Apps (1)", "  Web", "Background processes (1)", "  bash", "System processes (1)", "  systemd"]
@@ -380,16 +418,16 @@ mod tests {
 
         v.toggle("app:org.web".into());
         v.set_sort("cpu".into());
-        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0, &mut IconStore::empty()).procs;
         assert_eq!(names(&rows)[1..4], ["  Web", "    web-gpu", "    web"], "children sorted by CPU, largest first");
 
         v.filter = "bas".into();
-        let rows = v.build(Page::Processes, &procs, &snap, 0.0).procs;
+        let rows = v.build(Page::Processes, &procs, &snap, 0.0, &mut IconStore::empty()).procs;
         assert_eq!(names(&rows), ["Background processes (1)", "  bash"]);
 
         // Details lists every process, kernel threads included.
         v.filter.clear();
-        assert_eq!(v.build(Page::Details, &procs, &snap, 0.0).details.len(), 5);
+        assert_eq!(v.build(Page::Details, &procs, &snap, 0.0, &mut IconStore::empty()).details.len(), 5);
     }
 
     #[test]

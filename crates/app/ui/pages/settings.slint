@@ -1,49 +1,145 @@
-import { AboutSlint } from "std-widgets.slint";
+import { AboutSlint, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card, Chip, Switch } from "../components.slint";
+import { Card, Switch, Icon, Logo } from "../components.slint";
+import { Icons } from "../icons.slint";
+import { Button } from "../dialogs.slint";
 
-component Section inherits VerticalLayout {
+// A titled group of settings: a soft tile inside the page card.
+component Group inherits Rectangle {
     in property <string> title;
-    in property <string> note;
-    spacing: 10px;
+    in property <string> icon;
+
+    background: Theme.tile;
+    border-radius: Theme.radius-tile;
+
     VerticalLayout {
-        spacing: 2px;
-        Text { text: root.title; font-size: 15px; font-weight: 500; color: Theme.text; }
-        if root.note != "": Text { text: root.note; font-size: 12px; color: Theme.text-2; wrap: word-wrap; }
+        padding: 20px;
+        padding-top: 16px;
+        padding-bottom: 8px;
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 10px;
+            padding-bottom: 4px;
+            VerticalLayout {
+                alignment: center;
+                Icon { glyph: root.icon; size: 16px; tint: Theme.text-2; }
+            }
+            Text {
+                text: root.title;
+                font-size: 12.5px;
+                font-weight: 600;
+                color: Theme.text-2;
+                vertical-alignment: center;
+            }
+        }
+        @children
     }
-    @children
 }
 
-component Choice inherits HorizontalLayout {
+// One setting: what it is and what it does on the left, its control on the right.
+component Row inherits VerticalLayout {
+    in property <string> title;
+    in property <string> note;
+    in property <bool> enabled: true;
+    in property <bool> last;
+
+    HorizontalLayout {
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 24px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 3px;
+            Text {
+                text: root.title;
+                font-size: 14px;
+                font-weight: 500;
+                color: root.enabled ? Theme.text : Theme.text-2;
+            }
+            if root.note != "": Text {
+                text: root.note;
+                font-size: 12px;
+                color: Theme.text-2;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            @children
+        }
+    }
+    if !root.last: Rectangle { height: 1px; background: Theme.line; }
+}
+
+// Pick exactly one option. The selected segment is filled.
+component Segmented inherits Rectangle {
     in property <[string]> options;
     in property <int> current;
     callback picked(int);
-    spacing: 8px;
-    alignment: start;
-    for label[i] in root.options: Chip {
-        text: label;
-        clickable: true;
-        selected: i == root.current;
-        clicked => { root.picked(i); }
+
+    height: 34px;
+    border-radius: self.height / 2;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.line;
+    accessible-role: tab-list;
+
+    HorizontalLayout {
+        padding: 3px;
+        spacing: 2px;
+        for label[i] in root.options: Rectangle {
+            border-radius: self.height / 2;
+            background: i == root.current ? Theme.text : ta.has-hover ? Theme.hover : transparent;
+            min-width: t.preferred-width + 24px;
+            accessible-role: tab;
+            accessible-label: label;
+            accessible-checked: i == root.current;
+            accessible-action-default => { root.picked(i); }
+            animate background { duration: 120ms; }
+            t := Text {
+                text: label;
+                font-size: 12.5px;
+                font-weight: i == root.current ? 500 : 400;
+                color: i == root.current ? Theme.card : Theme.text;
+            }
+            ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.picked(i); }
+            }
+        }
     }
 }
 
-component Toggle inherits HorizontalLayout {
+component Keycap inherits Rectangle {
     in property <string> text;
-    in property <string> note;
-    in property <bool> on;
-    callback toggled();
-    spacing: 16px;
-    VerticalLayout {
-        horizontal-stretch: 1;
-        alignment: center;
-        spacing: 2px;
-        Text { text: root.text; font-size: 15px; font-weight: 500; color: Theme.text; }
-        Text { text: root.note; font-size: 12px; color: Theme.text-2; wrap: word-wrap; }
+    height: 24px;
+    min-width: label.preferred-width + 14px;
+    border-radius: 6px;
+    background: Theme.card;
+    border-width: 1px;
+    border-color: Theme.line;
+    drop-shadow-offset-y: 1px;
+    drop-shadow-color: Theme.line;
+    label := Text {
+        text: root.text;
+        font-size: 11.5px;
+        font-family: Theme.mono;
+        color: Theme.text;
     }
-    VerticalLayout {
+}
+
+component Shortcut inherits HorizontalLayout {
+    in property <[string]> keys;
+    in property <string> action;
+    in property <bool> last;
+    spacing: 6px;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    Text { horizontal-stretch: 1; text: root.action; font-size: 13.5px; color: Theme.text; vertical-alignment: center; }
+    for k in root.keys: VerticalLayout {
         alignment: center;
-        Switch { on: root.on; label: root.text; toggled => { root.toggled(); } }
+        Keycap { text: k; }
     }
 }
 
@@ -55,98 +151,282 @@ export component SettingsPage inherits Card {
     in-out property <bool> always-on-top;
     in-out property <bool> app-history;
     in-out property <bool> desktop-widgets;
+    in-out property <bool> top-bar-stats;
     in property <string> version;
+    // Wayland doesn't let apps keep themselves above other windows.
+    in property <bool> wayland;
     callback changed();
+    callback top-bar-toggled(bool);
+    callback clear-history();
+    callback open-url(string);
+    // Update checker
+    in-out property <bool> auto-update-check;
+    in property <bool> checking-updates;
+    // Set when a newer version exists; empty otherwise.
+    in property <string> update-version;
+    in property <string> update-url;
+    in property <string> update-status;
+    callback check-updates();
 
-    Flickable {
-        width: parent.width;
-        height: parent.height;
+    property <[string]> speeds: ["0.5 s", "1 s", "2 s", "5 s"];
+    property <[string]> speed-words: ["twice a second", "every second", "every 2 seconds", "every 5 seconds"];
 
-        VerticalLayout {
-            width: parent.width;
-            padding: 28px;
-            spacing: 26px;
-            alignment: start;
+    VerticalLayout {
+        padding: 28px;
+        padding-bottom: 0px;
+        spacing: 18px;
 
-            Text { text: "Settings"; font-size: 22px; font-weight: 500; color: Theme.text; }
+        HorizontalLayout {
+            VerticalLayout {
+                spacing: 3px;
+                Text { text: "Settings"; font-size: 22px; font-weight: 500; color: Theme.text; }
+                Text { text: "Changes are saved automatically."; font-size: 12.5px; color: Theme.text-2; }
+            }
+        }
 
-            Section {
-                title: "Theme";
-                Choice {
-                    options: ["Match desktop", "Light", "Dark"];
-                    current: root.theme;
-                    picked(i) => {
-                        root.theme = i;
-                        root.changed();
-                    }
-                }
-            }
-            Section {
-                title: "Update speed";
-                note: "How often numbers refresh. Faster uses a little more CPU.";
-                Choice {
-                    options: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
-                    current: root.refresh-index;
-                    picked(i) => {
-                        root.refresh-index = i;
-                        root.changed();
-                    }
-                }
-            }
-            Section {
-                title: "Open on";
-                Choice {
-                    options: ["Processes", "Performance", "Details"];
-                    current: root.start-page;
-                    picked(i) => {
-                        root.start-page = i;
-                        root.changed();
-                    }
-                }
-            }
-            Toggle {
-                text: "Always on top";
-                note: "Keep TaskMonitor above other windows. Works on X11; Wayland desktops don't allow apps to do this.";
-                on: root.always-on-top;
-                toggled => {
-                    root.always-on-top = !root.always-on-top;
-                    root.changed();
-                }
-            }
-            Toggle {
-                text: "Desktop widgets";
-                note: "Keep the compact CPU, memory, disk and network panel on top and running after TaskMonitor closes. Start it without the main window with taskmonitor --widgets.";
-                on: root.desktop-widgets;
-                toggled => {
-                    root.desktop-widgets = !root.desktop-widgets;
-                    root.changed();
-                }
-            }
-            Toggle {
-                text: "App history";
-                note: "Record how much CPU, disk and GPU time each app uses. Stored only on this computer.";
-                on: root.app-history;
-                toggled => {
-                    root.app-history = !root.app-history;
-                    root.changed();
-                }
-            }
-            Section {
-                title: "About";
-                note: "TaskMonitor " + root.version + " · MIT License · github.com/anuzdhk/linux-taskmanager";
-                // Attribution required by the Slint royalty-free licence.
-                HorizontalLayout {
+        ScrollView {
+            vertical-stretch: 1;
+            content-height: columns.preferred-height + 28px;
+
+            columns := HorizontalLayout {
+                width: parent.width - 16px;
+                spacing: 18px;
+                alignment: start;
+
+                // Left: how TaskMonitor looks and behaves.
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 18px;
                     alignment: start;
-                    AboutSlint { }
+
+                    Group {
+                        title: "APPEARANCE";
+                        icon: Icons.palette;
+                        Row {
+                            title: "Theme";
+                            note: root.theme == 0 ? "Follows your desktop's light or dark setting." : root.theme == 1 ? "Always light." : "Always dark.";
+                            last: true;
+                            Segmented {
+                                options: ["Match desktop", "Light", "Dark"];
+                                current: root.theme;
+                                picked(i) => {
+                                    root.theme = i;
+                                    root.changed();
+                                }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "BEHAVIOUR";
+                        icon: Icons.behaviour;
+                        Row {
+                            title: "Open on";
+                            note: "The page TaskMonitor shows when it starts.";
+                            Segmented {
+                                options: ["Processes", "Performance", "Details"];
+                                current: root.start-page;
+                                picked(i) => {
+                                    root.start-page = i;
+                                    root.changed();
+                                }
+                            }
+                        }
+                        Row {
+                            title: "Update speed";
+                            note: root.refresh-index >= 4
+                                ? "Paused: numbers won't change until you pick a speed."
+                                : "Numbers refresh " + root.speed-words[root.refresh-index] + ". Faster uses a little more CPU.";
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Segmented {
+                                    options: root.speeds;
+                                    current: root.refresh-index;
+                                    picked(i) => {
+                                        root.refresh-index = i;
+                                        root.changed();
+                                    }
+                                }
+                                Segmented {
+                                    options: ["Pause"];
+                                    current: root.refresh-index >= 4 ? 0 : -1;
+                                    picked => {
+                                        root.refresh-index = root.refresh-index >= 4 ? 1 : 4;
+                                        root.changed();
+                                    }
+                                }
+                            }
+                        }
+                        Row {
+                            title: "Always on top";
+                            note: root.wayland
+                                ? "Not available on Wayland: it doesn't let apps keep themselves above other windows."
+                                : "Keep TaskMonitor above other windows.";
+                            enabled: !root.wayland;
+                            last: false;
+                            Switch {
+                                on: root.always-on-top && !root.wayland;
+                                label: "Always on top";
+                                opacity: root.wayland ? 0.4 : 1;
+                                toggled => {
+                                    if !root.wayland {
+                                        root.always-on-top = !root.always-on-top;
+                                        root.changed();
+                                    }
+                                }
+                            }
+                        }
+                        Row {
+                            title: "Desktop widgets";
+                            note: "Keep the compact CPU, memory, disk and network panel in its own topmost window. It continues after TaskMonitor closes; start it alone with taskmonitor --widgets.";
+                            last: true;
+                            Switch {
+                                on: root.desktop-widgets;
+                                label: "Desktop widgets";
+                                toggled => {
+                                    root.desktop-widgets = !root.desktop-widgets;
+                                    root.changed();
+                                }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "UPDATES";
+                        icon: Icons.download;
+                        Row {
+                            title: "Check for updates automatically";
+                            note: "Once a day, TaskMonitor asks GitHub for the latest version number. No personal or system information is included.";
+                            Switch {
+                                on: root.auto-update-check;
+                                label: "Check for updates automatically";
+                                toggled => {
+                                    root.auto-update-check = !root.auto-update-check;
+                                    root.changed();
+                                }
+                            }
+                        }
+                        Row {
+                            title: root.update-version != "" ? "Version " + root.update-version + " is available" : "TaskMonitor " + root.version;
+                            note: root.update-status;
+                            last: true;
+                            if root.update-version != "": Button {
+                                text: "Download";
+                                primary: true;
+                                height: 34px;
+                                clicked => { root.open-url(root.update-url); }
+                            }
+                            if root.update-version == "": Button {
+                                text: root.checking-updates ? "Checking…" : "Check now";
+                                raised: true;
+                                height: 34px;
+                                enabled: !root.checking-updates;
+                                clicked => { root.check-updates(); }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "KEYBOARD SHORTCUTS";
+                        icon: Icons.keyboard;
+                        Shortcut { action: "Switch pages (in sidebar order)"; keys: ["Ctrl", "1 – 7"]; }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        Shortcut { action: "Close the TaskMonitor window"; keys: ["Ctrl", "W"]; }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        Shortcut { action: "End the selected task"; keys: ["Delete"]; }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        Shortcut { action: "Close a dialog"; keys: ["Esc"]; }
+                    }
                 }
-            }
-            Section {
-                title: "Keyboard shortcuts";
-                Text {
-                    text: "Ctrl+1 – Ctrl+7  switch pages\nCtrl+W  close TaskMonitor\nDelete  end the selected task\nEsc  close a dialog";
-                    font-size: 12.5px;
-                    font-family: Theme.mono;
-                    color: Theme.text-2;
+
+                // Right: integrations, data, and about.
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 18px;
+                    alignment: start;
+
+                    Group {
+                        title: "TOP BAR";
+                        icon: Icons.top-bar;
+                        Row {
+                            title: "CPU, RAM and GPU in the top bar";
+                            note: "Shows live usage next to your clock. Click it to bring TaskMonitor forward.";
+                            last: true;
+                            Switch {
+                                on: root.top-bar-stats;
+                                label: "Show CPU, RAM and GPU in the top bar";
+                                toggled => {
+                                    root.top-bar-stats = !root.top-bar-stats;
+                                    root.top-bar-toggled(root.top-bar-stats);
+                                }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "PRIVACY & DATA";
+                        icon: Icons.privacy;
+                        Row {
+                            title: "App history";
+                            note: "Records CPU, disk and GPU time per app. Stored only on this computer.";
+                            Switch {
+                                on: root.app-history;
+                                label: "App history";
+                                toggled => {
+                                    root.app-history = !root.app-history;
+                                    root.changed();
+                                }
+                            }
+                        }
+                        Row {
+                            title: "Clear app history";
+                            note: "Deletes everything recorded so far and starts again.";
+                            enabled: root.app-history;
+                            last: true;
+                            Button {
+                                text: "Clear";
+                                raised: true;
+                                height: 34px;
+                                enabled: root.app-history;
+                                clicked => { root.clear-history(); }
+                            }
+                        }
+                    }
+
+                    Group {
+                        title: "ABOUT";
+                        icon: Icons.info;
+                        HorizontalLayout {
+                            padding-top: 8px;
+                            padding-bottom: 12px;
+                            spacing: 14px;
+                            VerticalLayout {
+                                alignment: center;
+                                Logo { size: 48px; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 2px;
+                                Text { text: "TaskMonitor"; font-size: 16px; font-weight: 600; color: Theme.text; }
+                                Text { text: "Version " + root.version + " · MIT License"; font-size: 12.5px; color: Theme.text-2; }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            padding-bottom: 12px;
+                            Button { text: "View on GitHub"; raised: true; height: 34px; clicked => { root.open-url("https://github.com/anuzdhk/linux-taskmanager"); } }
+                            Button { text: "Report a problem"; raised: true; height: 34px; clicked => { root.open-url("https://github.com/anuzdhk/linux-taskmanager/issues/new"); } }
+                        }
+                        Rectangle { height: 1px; background: Theme.line; }
+                        // Attribution required by the Slint royalty-free licence.
+                        HorizontalLayout {
+                            padding-top: 4px;
+                            padding-bottom: 4px;
+                            alignment: start;
+                            AboutSlint { width: 150px; }
+                        }
+                    }
                 }
             }
         }

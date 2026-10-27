@@ -1,9 +1,9 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card, Icon, Badge } from "../components.slint";
+import { Card, Icon, Badge, AppIcon, IconButton } from "../components.slint";
 import { Icons } from "../icons.slint";
 import { SearchField, HeaderCell, HeatCell, Cell, ProcessMenu } from "../table.slint";
-import { Button } from "../dialogs.slint";
+import { ProcessActionButton } from "../dialogs.slint";
 import { ProcRow, ProcTotals } from "../types.slint";
 
 // Shared column widths for header and rows.
@@ -14,6 +14,7 @@ global Cols {
 
 component Row inherits Rectangle {
     in property <ProcRow> item;
+    in property <[image]> icons;
     in property <bool> selected;
     callback select();
     callback toggle();
@@ -75,8 +76,10 @@ component Row inherits Rectangle {
             }
             if root.item.kind == 1: VerticalLayout {
                 alignment: center;
-                Badge {
-                    text: root.item.initials;
+                AppIcon {
+                    icons: root.icons;
+                    icon: root.item.icon;
+                    initials: root.item.initials;
                     tone: Theme.badges[root.item.tone];
                     size: 28px;
                 }
@@ -119,6 +122,7 @@ component Row inherits Rectangle {
 
 export component ProcessesPage inherits Card {
     in property <[ProcRow]> rows;
+    in property <[image]> icons;
     in property <ProcTotals> totals;
     in property <string> sort-column;
     in property <bool> ascending;
@@ -130,6 +134,13 @@ export component ProcessesPage inherits Card {
     callback request(string, string);
     callback properties(string);
     callback affinity(string);
+    callback run-task();
+
+    // A new sort order or search shows the list from the top; otherwise the view
+    // stays wherever the old order had it, which looks like rows went missing.
+    changed sort-column => { list.viewport-y = 0; }
+    changed ascending => { list.viewport-y = 0; }
+    changed filter => { list.viewport-y = 0; }
 
     VerticalLayout {
         padding: 20px;
@@ -147,11 +158,20 @@ export component ProcessesPage inherits Card {
             Rectangle { horizontal-stretch: 1; }
             VerticalLayout {
                 alignment: center;
-                Button {
-                    text: "End task";
-                    primary: true;
+                IconButton {
+                    icon: Icons.terminal;
+                    label: "Run new task";
+                    Tooltip { text: @markdown("\{parent.label}"); }
+                    size: 40px;
+                    icon-size: 18px;
+                    clicked => { root.run-task(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                ProcessActionButton {
                     enabled: root.selected-key != "";
-                    clicked => { root.request("end", root.selected-key); }
+                    request(action) => { root.request(action, root.selected-key); }
                 }
             }
             VerticalLayout {
@@ -227,10 +247,11 @@ export component ProcessesPage inherits Card {
         }
         Rectangle { height: 1px; background: Theme.line; }
 
-        ListView {
+        list := ListView {
             vertical-stretch: 1;
             for row in root.rows: Row {
                 item: row;
+                icons: root.icons;
                 selected: row.key == root.selected-key;
                 select => { root.selected-key = row.key; }
                 toggle => { root.toggle(row.key); }

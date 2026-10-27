@@ -8,7 +8,10 @@ use taskmonitor_core::startup::StartupEntry;
 use taskmonitor_core::users::Session;
 use taskmonitor_core::{Process, Snapshot};
 
+use crate::app_icons::IconStore;
 use crate::processes::{initials, mem_text, tone};
+use std::sync::Arc;
+use taskmonitor_core::apps::Registry;
 use crate::{HistoryRow, ServiceRow, StartupRow, UserRow};
 
 pub fn service_rows(services: &[Service], filter: &str) -> (Vec<ServiceRow>, String) {
@@ -46,7 +49,7 @@ pub fn service_rows(services: &[Service], filter: &str) -> (Vec<ServiceRow>, Str
     (rows, format!("{running} running of {}", services.len()))
 }
 
-pub fn startup_rows(entries: &[StartupEntry]) -> Vec<StartupRow> {
+pub fn startup_rows(entries: &[StartupEntry], icons: &mut IconStore) -> Vec<StartupRow> {
     entries
         .iter()
         .map(|e| StartupRow {
@@ -55,6 +58,7 @@ pub fn startup_rows(entries: &[StartupEntry]) -> Vec<StartupRow> {
             command: e.command.as_str().into(),
             initials: initials(&e.name).into(),
             tone: tone(&e.name),
+            icon: icons.slot(e.icon.as_deref().map(Arc::from).as_ref()),
             enabled: e.enabled,
             source: if e.system { "System" } else { "Yours" }.into(),
         })
@@ -106,7 +110,7 @@ pub fn user_rows(sessions: &[Session], procs: &[Process], snap: &Snapshot) -> Ve
 }
 
 /// Apps by CPU time, most first.
-pub fn history_rows(log: &AppUsageLog) -> Vec<HistoryRow> {
+pub fn history_rows(log: &AppUsageLog, icons: &mut IconStore, registry: &Registry) -> Vec<HistoryRow> {
     let mut apps: Vec<_> = log.apps.values().collect();
     apps.sort_by(|a, b| b.cpu_secs.total_cmp(&a.cpu_secs));
     let max = apps.first().map_or(1.0, |a| a.cpu_secs.max(1.0));
@@ -119,6 +123,7 @@ pub fn history_rows(log: &AppUsageLog) -> Vec<HistoryRow> {
             name: a.name.as_str().into(),
             initials: initials(&a.name).into(),
             tone: tone(&a.name),
+            icon: icons.slot(registry.icon_for_id(&a.id).as_ref()),
             cpu: duration(a.cpu_secs).into(),
             cpu_heat: (a.cpu_secs / max) as f32,
             read: mem_text(a.read_bytes as u64).into(),

@@ -13,6 +13,10 @@ pub struct Settings {
     pub always_on_top: bool,
     pub app_history: bool,
     pub desktop_widgets: bool,
+    /// CPU / RAM / GPU in the desktop's top bar.
+    pub top_bar_stats: bool,
+    /// Ask GitHub for a newer version at most once a day.
+    pub check_updates: bool,
 }
 
 impl Default for Settings {
@@ -24,6 +28,8 @@ impl Default for Settings {
             always_on_top: false,
             app_history: false,
             desktop_widgets: false,
+            top_bar_stats: false,
+            check_updates: true,
         }
     }
 }
@@ -51,6 +57,8 @@ impl Settings {
                 "always_on_top" => s.always_on_top = value == "true",
                 "app_history" => s.app_history = value == "true",
                 "desktop_widgets" => s.desktop_widgets = value == "true",
+                "top_bar_stats" => s.top_bar_stats = value == "true",
+                "check_updates" => s.check_updates = value != "false",
                 _ => {}
             }
         }
@@ -63,11 +71,38 @@ impl Settings {
             fs::create_dir_all(dir)?;
         }
         let text = format!(
-            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\ndesktop_widgets = {}\n",
-            self.theme, self.refresh, self.start_page, self.always_on_top, self.app_history, self.desktop_widgets
+            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\ndesktop_widgets = {}\ntop_bar_stats = {}\ncheck_updates = {}\n",
+            self.theme,
+            self.refresh,
+            self.start_page,
+            self.always_on_top,
+            self.app_history,
+            self.desktop_widgets,
+            self.top_bar_stats,
+            self.check_updates
         );
         fs::write(path, text)
     }
+}
+
+/// When updates were last checked (Unix seconds). Kept in the cache directory, not the
+/// settings file, since it's bookkeeping rather than a choice the user made.
+pub fn last_update_check() -> u64 {
+    fs::read_to_string(cache_file()).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0)
+}
+
+pub fn set_last_update_check(when: u64) {
+    let path = cache_file();
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let _ = fs::write(path, when.to_string());
+}
+
+fn cache_file() -> PathBuf {
+    let cache = std::env::var("XDG_CACHE_HOME")
+        .unwrap_or_else(|_| format!("{}/.cache", std::env::var("HOME").unwrap_or_default()));
+    PathBuf::from(cache).join("taskmonitor/last-update-check")
 }
 
 #[cfg(test)]
@@ -76,8 +111,21 @@ mod tests {
 
     #[test]
     fn parses_with_defaults_and_clamping() {
-        let s = Settings::parse("theme = 2\nrefresh = 99\napp_history = true\ndesktop_widgets = true\nunknown = x\n");
-        assert_eq!(s, Settings { theme: 2, refresh: 4, app_history: true, desktop_widgets: true, ..Default::default() });
+        let s = Settings::parse(
+            "theme = 2\nrefresh = 99\napp_history = true\ndesktop_widgets = true\ntop_bar_stats = true\ncheck_updates = false\nunknown = x\n",
+        );
+        assert_eq!(
+            s,
+            Settings {
+                theme: 2,
+                refresh: 4,
+                app_history: true,
+                desktop_widgets: true,
+                top_bar_stats: true,
+                check_updates: false,
+                ..Default::default()
+            }
+        );
         assert_eq!(Settings::parse(""), Settings::default());
     }
 }

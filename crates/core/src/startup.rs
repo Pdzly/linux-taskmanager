@@ -15,6 +15,8 @@ pub struct StartupEntry {
     pub enabled: bool,
     /// The entry comes from the system directory (possibly overridden by the user).
     pub system: bool,
+    /// `Icon=`: a theme icon name or an absolute path.
+    pub icon: Option<String>,
 }
 
 fn user_dir() -> PathBuf {
@@ -75,6 +77,7 @@ pub fn parse(id: &str, text: &str, desktops: &[String], system: bool) -> Option<
         command: get("Exec").unwrap_or_default(),
         enabled,
         system,
+        icon: get("Icon").filter(|i| !i.is_empty()),
     })
 }
 

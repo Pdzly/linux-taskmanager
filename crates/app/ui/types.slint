@@ -60,6 +60,8 @@ export struct ProcRow {
     count: string,
     initials: string,
     tone: int,
+    // Index into the window's app-icons, or -1 to show the initials badge.
+    icon: int,
     expandable: bool,
     expanded: bool,
     status: string,
@@ -95,6 +97,8 @@ export struct DetailRow {
     threads: string,
     nice: string,
     cmd: string,
+    read: string,
+    write: string,
     suspended: bool,
     efficiency: bool,
 }
@@ -117,6 +121,7 @@ export struct StartupRow {
     command: string,
     initials: string,
     tone: int,
+    icon: int,
     enabled: bool,
     source: string,
 }
@@ -139,9 +144,20 @@ export struct HistoryRow {
     name: string,
     initials: string,
     tone: int,
+    icon: int,
     cpu: string,
     cpu-heat: float,
     read: string,
     write: string,
     gpu: string,
+}
+
+// A process on the Performance page's Disk activity card.
+export struct DiskProcRow {
+    name: string,
+    initials: string,
+    tone: int,
+    icon: int,
+    read: string,
+    write: string,
 }

@@ -219,11 +219,13 @@ export component Stat inherits VerticalLayout {
     }
 }
 
-// Card title row: label on the left, "more" button on the right.
+// Card title with an optional subtitle. Keeps the height the old "more" button gave it,
+// so card layouts don't shift.
 export component CardHeader inherits HorizontalLayout {
     in property <string> title;
     in property <string> subtitle;
 
+    min-height: 32px;
     spacing: 8px;
     VerticalLayout {
         alignment: center;
@@ -239,13 +241,6 @@ export component CardHeader inherits HorizontalLayout {
             color: Theme.text-2;
             font-size: 12px;
         }
-    }
-    Rectangle { horizontal-stretch: 1; }
-    IconButton {
-        icon: Icons.more;
-        label: "More";
-        size: 32px;
-        icon-size: 16px;
     }
 }
 
@@ -323,5 +318,29 @@ export component Switch inherits Rectangle {
     TouchArea {
         mouse-cursor: pointer;
         clicked => { root.toggled(); }
+    }
+}
+
+// An app's icon when it has one, otherwise its initials badge.
+export component AppIcon inherits Rectangle {
+    in property <[image]> icons;
+    // Index into `icons`, or -1 for none.
+    in property <int> icon: -1;
+    in property <string> initials;
+    in property <color> tone;
+    in property <length> size: 28px;
+
+    width: size;
+    height: size;
+    if root.icon >= 0: Image {
+        source: root.icons[root.icon];
+        width: root.size;
+        height: root.size;
+        image-rendering: smooth;
+    }
+    if root.icon < 0: Badge {
+        text: root.initials;
+        tone: root.tone;
+        size: root.size;
     }
 }

@@ -8,14 +8,14 @@ import "../fonts/lucide-subset.ttf";
 
 import { Theme, Page } from "theme.slint";
 import { Palette } from "std-widgets.slint";
-import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow } from "types.slint";
-export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DesktopWidgets }
+import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DiskProcRow } from "types.slint";
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DiskProcRow, DesktopWidgets }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
 import { ProcessesPage } from "pages/processes.slint";
 import { DetailsPage } from "pages/details.slint";
-import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast } from "dialogs.slint";
+import { ConfirmDialog, PropertiesSheet, AffinityDialog, Toast, RunTaskDialog } from "dialogs.slint";
 import { ServicesPage } from "pages/services.slint";
 import { StartupPage } from "pages/startup.slint";
 import { UsersPage } from "pages/users.slint";
@@ -35,6 +35,16 @@ export component MainWindow inherits Window {
     default-font-size: 14px;
 
     in property <string> version;
+    // Running on Wayland (no always-on-top for apps).
+    in property <bool> wayland;
+    callback open-url(string);
+    // Update checker
+    in-out property <bool> auto-update-check: true;
+    in property <bool> checking-updates;
+    in property <string> update-version;
+    in property <string> update-url;
+    in property <string> update-status;
+    callback check-updates();
     in property <string> user-name;
     in property <string> user-initials;
     in property <Summary> summary: { cpu: "—", ram: "—", gpu: "—", uptime: "—" };
@@ -47,6 +57,9 @@ export component MainWindow inherits Window {
     in property <[DeviceView]> gpus;
     in-out property <int> perf-tab;
     callback perf-tab-changed(int);
+    // App icons, rendered once in Rust; rows refer to them by index.
+    in property <[image]> app-icons;
+    in property <[DiskProcRow]> disk-procs;
     in property <[ProcRow]> proc-rows;
     in property <[DetailRow]> detail-rows;
     in property <ProcTotals> proc-totals;
@@ -78,6 +91,11 @@ export component MainWindow inherits Window {
     in property <string> history-since;
     in-out property <int> theme-choice;
     changed theme-choice => {
+        // Slint's own widgets (the About Slint badge, scrollbars) follow Palette, so an
+        // explicit choice is applied there too; "unknown" hands it back to the desktop.
+        Palette.color-scheme = self.theme-choice == 1 ? ColorScheme.light
+            : self.theme-choice == 2 ? ColorScheme.dark
+            : ColorScheme.unknown;
         Theme.dark = self.theme-choice == 2 || (self.theme-choice == 0 && Palette.color-scheme == ColorScheme.dark);
     }
     in-out property <int> refresh-index: 1;
@@ -85,8 +103,12 @@ export component MainWindow inherits Window {
     in-out property <bool> app-history;
     in-out property <bool> desktop-widgets;
     callback settings-changed();
+    // CPU / RAM / GPU in the desktop's top bar (system tray).
+    in-out property <bool> top-bar-stats;
+    callback top-bar-toggled(bool);
     callback clear-history();
     callback close-main();
+    callback show-main();
     in-out property <bool> on-top;
     always-on-top: root.on-top;
 
@@ -94,6 +116,8 @@ export component MainWindow inherits Window {
     in-out property <string> toast;
     in property <string> props-title;
     in property <[Metric]> props;
+    in property <string> props-text;
+    property <bool> run-open;
     in-out property <bool> props-open;
     in property <string> affinity-title;
     in property <[bool]> affinity-cpus;
@@ -107,6 +131,14 @@ export component MainWindow inherits Window {
     callback affinity-all();
     callback affinity-apply(string);
 
+    // Slint has no clipboard API; a hidden text field's copy() reaches the system clipboard.
+    function copy-text(text: string) {
+        clipboard.text = text;
+        clipboard.select-all();
+        clipboard.copy();
+        root.toast = "Copied to the clipboard";
+    }
+
     function go(p: Page) {
         root.page = p;
         root.page-changed(p);
@@ -114,7 +146,7 @@ export component MainWindow inherits Window {
 
     // Kill and End process tree can lose work, so they ask first.
     function request(action: string, key: string) {
-        if action == "kill" || action == "tree" || action == "terminate" {
+        if action == "kill" || action == "tree" || action == "terminate" || action == "clear-history" {
             root.confirm-action = action;
             root.confirm-key = key;
         } else {
@@ -141,6 +173,7 @@ export component MainWindow inherits Window {
             }
             if event.text == Key.Escape {
                 root.confirm-action = "";
+                root.run-open = false;
                 root.props-open = false;
                 root.affinity-open = false;
                 return accept;
@@ -168,6 +201,13 @@ export component MainWindow inherits Window {
                     user-initials: root.user-initials;
                     summary: root.summary;
                     refresh-changed(i) => { root.refresh-changed(i); }
+                    top-bar-stats: root.top-bar-stats;
+                    update-version: root.update-version;
+                    update-clicked => { root.go(Page.settings); }
+                    top-bar-toggled => {
+                        root.top-bar-stats = !root.top-bar-stats;
+                        root.top-bar-toggled(root.top-bar-stats);
+                    }
                     // The quick toggle picks an explicit theme and remembers it.
                     theme-toggled => {
                         root.theme-choice = Theme.dark ? 1 : 2;
@@ -210,9 +250,12 @@ export component MainWindow inherits Window {
                         root.page = Page.users;
                         root.page-changed(Page.users);
                     }
-                    run-command(cmd) => { root.run-command(cmd); }
+                    disk-procs: root.disk-procs;
+                    icons: root.app-icons;
                 }
                 if root.page == Page.processes: ProcessesPage {
+                    run-task => { root.run-open = true; }
+                    icons: root.app-icons;
                     rows: root.proc-rows;
                     totals: root.proc-totals;
                     sort-column: root.sort-column;
@@ -230,6 +273,7 @@ export component MainWindow inherits Window {
                     }
                 }
                 if root.page == Page.history: HistoryPage {
+                    icons: root.app-icons;
                     rows: root.history-rows;
                     enabled: root.app-history;
                     since: root.history-since;
@@ -237,9 +281,10 @@ export component MainWindow inherits Window {
                         root.app-history = true;
                         root.settings-changed();
                     }
-                    clear => { root.clear-history(); }
+                    clear => { root.request("clear-history", ""); }
                 }
                 if root.page == Page.startup: StartupPage {
+                    icons: root.app-icons;
                     rows: root.startup-rows;
                     toggled(id, on) => { root.startup-toggled(id, on); }
                 }
@@ -288,8 +333,19 @@ export component MainWindow inherits Window {
                     always-on-top <=> root.on-top;
                     app-history <=> root.app-history;
                     desktop-widgets <=> root.desktop-widgets;
+                    top-bar-stats <=> root.top-bar-stats;
                     version: root.version;
+                    wayland: root.wayland;
                     changed => { root.settings-changed(); }
+                    top-bar-toggled(on) => { root.top-bar-toggled(on); }
+                    clear-history => { root.request("clear-history", ""); }
+                    open-url(url) => { root.open-url(url); }
+                    auto-update-check <=> root.auto-update-check;
+                    checking-updates: root.checking-updates;
+                    update-version: root.update-version;
+                    update-url: root.update-url;
+                    update-status: root.update-status;
+                    check-updates => { root.check-updates(); }
                 }
             }
         }
@@ -300,17 +356,25 @@ export component MainWindow inherits Window {
         height: root.height;
         title: root.confirm-action == "kill" ? "Kill this process?"
             : root.confirm-action == "terminate" ? "Sign out this session?"
+            : root.confirm-action == "clear-history" ? "Clear app history?"
             : "End the whole process tree?";
         message: root.confirm-action == "kill"
             ? "It stops immediately, without a chance to save. Unsaved work in it will be lost."
             : root.confirm-action == "terminate"
             ? "Every app in the session is closed. Unsaved work in them will be lost."
+            : root.confirm-action == "clear-history"
+            ? "Everything recorded so far is deleted. Recording continues from now."
             : "This ends the process and every process it started. Unsaved work in any of them will be lost.";
-        confirm-text: root.confirm-action == "kill" ? "Kill" : root.confirm-action == "terminate" ? "Sign out" : "End process tree";
+        confirm-text: root.confirm-action == "kill" ? "Kill"
+            : root.confirm-action == "terminate" ? "Sign out"
+            : root.confirm-action == "clear-history" ? "Clear history"
+            : "End process tree";
         dismiss => { root.confirm-action = ""; }
         confirmed => {
             if root.confirm-action == "terminate" {
                 root.session-act("terminate", root.confirm-key);
+            } else if root.confirm-action == "clear-history" {
+                root.clear-history();
             } else {
                 root.action(root.confirm-action, root.confirm-key);
             }
@@ -323,6 +387,8 @@ export component MainWindow inherits Window {
         height: root.height;
         title: root.props-title;
         facts: root.props;
+        all-text: root.props-text;
+        copy(text) => { root.copy-text(text); }
         dismiss => { root.props-open = false; }
     }
 
@@ -337,6 +403,23 @@ export component MainWindow inherits Window {
             root.affinity-apply(root.affinity-key);
             root.affinity-open = false;
         }
+    }
+
+    if root.run-open: RunTaskDialog {
+        width: root.width;
+        height: root.height;
+        user-name: root.user-name;
+        dismiss => { root.run-open = false; }
+        run(cmd) => {
+            root.run-command(cmd);
+            root.run-open = false;
+        }
+    }
+
+    clipboard := TextInput {
+        visible: false;
+        width: 0;
+        height: 0;
     }
 
     if root.toast != "": Toast {

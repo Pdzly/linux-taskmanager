@@ -1,4 +1,5 @@
 mod actions;
+mod app_icons;
 mod bench;
 mod bridge;
 mod format;
@@ -6,11 +7,14 @@ mod processes;
 mod settings;
 mod system_pages;
 mod widgets;
+mod tray;
+mod updates;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use taskmonitor_core::app_usage::{self, AppUsageLog};
@@ -36,6 +40,12 @@ fn main() -> Result<(), slint::PlatformError> {
     // Needs the platform that MainWindow::new() set up, and must happen before showing.
     slint::set_xdg_app_id("io.github.taskmonitor")?;
     ui.set_version(env!("CARGO_PKG_VERSION").into());
+    ui.set_wayland(
+        std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var("XDG_SESSION_TYPE").is_ok_and(|t| t == "wayland"),
+    );
+    ui.on_open_url(|url| {
+        let _ = std::process::Command::new("xdg-open").arg(url.as_str()).spawn();
+    });
 
     let user = std::env::var("USER").unwrap_or_else(|_| "user".into());
     let initials: String = user.chars().take(2).collect::<String>().to_uppercase();
@@ -53,6 +63,19 @@ fn main() -> Result<(), slint::PlatformError> {
     desktop_widgets.set_theme_choice(prefs.theme);
     desktop_widgets.set_paused(prefs.refresh == 4);
 
+    ui.set_top_bar_stats(prefs.top_bar_stats);
+    ui.set_auto_update_check(prefs.check_updates);
+    ui.set_update_status(last_checked_text(settings::last_update_check()).into());
+    ui.on_check_updates({
+        let ui = ui.as_weak();
+        move || check_for_updates(ui.clone(), true)
+    });
+    // Automatic check: once a day, a few seconds after start so it never slows startup.
+    let now = unix_now();
+    if prefs.check_updates && now.saturating_sub(settings::last_update_check()) >= updates::INTERVAL_SECS {
+        let ui = ui.as_weak();
+        slint::Timer::single_shot(Duration::from_secs(8), move || check_for_updates(ui, false));
+    }
     let start = match prefs.start_page.as_str() {
         "performance" => (1, Page::Performance),
         "details" => (2, Page::Details),
@@ -73,6 +96,18 @@ fn main() -> Result<(), slint::PlatformError> {
     let send = move |cmd| {
         let _ = tx.send(cmd);
     };
+    if prefs.top_bar_stats {
+        send(Cmd::TopBar(true));
+    }
+    ui.on_top_bar_toggled({
+        let send = send.clone();
+        let ui = ui.as_weak();
+        move |on| {
+            save_settings(&ui.unwrap());
+            send(Cmd::TopBar(on));
+        }
+    });
+
 
     send(Cmd::Page(start.1));
     if prefs.refresh != settings::Settings::default().refresh {
@@ -264,7 +299,7 @@ fn main() -> Result<(), slint::PlatformError> {
             }
         }
     });
-    desktop_widgets.on_open_main({
+    ui.on_show_main({
         let ui = ui.as_weak();
         let main_visible = main_visible.clone();
         let send = send.clone();
@@ -288,6 +323,10 @@ fn main() -> Result<(), slint::PlatformError> {
                 Err(e) => eprintln!("couldn't show TaskMonitor window: {e}"),
             }
         }
+    });
+    desktop_widgets.on_open_main({
+        let ui = ui.as_weak();
+        move || ui.unwrap().invoke_show_main()
     });
     desktop_widgets.on_dismiss({
         let ui = ui.as_weak();
@@ -347,10 +386,11 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_page(page);
         ui.invoke_page_changed(page);
     }
-    if let Some(tab) = std::env::var("TASKMONITOR_TAB")
-        .ok()
-        .and_then(|t| t.parse().ok())
-    {
+    // Dev aid: TASKMONITOR_SORT=mem sorts the tables by that column (for screenshots).
+    if let Ok(column) = std::env::var("TASKMONITOR_SORT") {
+        ui.invoke_sort(column.into());
+    }
+    if let Some(tab) = std::env::var("TASKMONITOR_TAB").ok().and_then(|t| t.parse().ok()) {
         ui.set_perf_tab(tab);
         ui.invoke_perf_tab_changed(tab);
     }
@@ -422,6 +462,8 @@ fn save_settings(ui: &MainWindow) {
         always_on_top: ui.get_on_top(),
         app_history: ui.get_app_history(),
         desktop_widgets: ui.get_desktop_widgets(),
+        top_bar_stats: ui.get_top_bar_stats(),
+        check_updates: ui.get_auto_update_check(),
     };
     if let Err(e) = prefs.save() {
         ui.set_toast(format!("Couldn't save settings: {e}").into());
@@ -465,8 +507,96 @@ enum Cmd {
     MainVisible(bool),
     WidgetsVisible(bool),
     ClearHistory,
+    /// Show (true) or remove CPU / RAM / GPU in the desktop's top bar.
+    TopBar(bool),
     Quit,
 }
+
+/// Per-PID GPU busy seconds accumulated between process-history samples.
+///
+/// GPU rates can arrive more frequently than process rates while the tray is visible.
+/// Keeping the integral avoids attributing only the last GPU interval to the whole
+/// process interval.
+#[derive(Default)]
+struct GpuHistory {
+    busy_secs: HashMap<u32, f64>,
+    tracking: bool,
+}
+
+impl GpuHistory {
+    /// Drops an incomplete interval and makes the next GPU sample a fresh baseline.
+    fn rebaseline(&mut self) {
+        self.busy_secs.clear();
+        self.tracking = false;
+    }
+
+    fn observe(&mut self, rates: &HashMap<u32, f32>, secs: f64) {
+        if !self.tracking {
+            self.tracking = true;
+            return;
+        }
+        if secs <= 0.0 {
+            return;
+        }
+        for (&pid, &rate) in rates {
+            *self.busy_secs.entry(pid).or_default() += rate as f64 * secs;
+        }
+    }
+
+    /// Returns this PID's rate over `secs` without consuming the integral.
+    fn rate(&self, pid: u32, secs: f64) -> f32 {
+        if secs <= 0.0 {
+            return 0.0;
+        }
+        (self.busy_secs.get(&pid).copied().unwrap_or(0.0) / secs) as f32
+    }
+
+    /// Completes a valid process-history interval while retaining allocated capacity.
+    fn clear_recorded(&mut self) {
+        self.busy_secs.clear();
+    }
+}
+
+/// Samples GPU usage and integrates per-process rates for app history when enabled.
+fn sample_gpu(
+    sampler: &mut GpuSampler,
+    detail: bool,
+    last_sample: &mut Instant,
+    history: Option<&mut GpuHistory>,
+) -> (Vec<taskmonitor_core::Gpu>, HashMap<u32, f32>) {
+    let now = Instant::now();
+    let secs = now.duration_since(*last_sample).as_secs_f64();
+    *last_sample = now;
+    let result = sampler.sample(detail);
+    if let Some(history) = history {
+        history.observe(&result.1, secs);
+    }
+    result
+}
+
+/// Records app history with the integrated GPU rate while preserving instantaneous
+/// per-process GPU values used by visible UI rows.
+fn record_history(
+    log: &mut AppUsageLog,
+    procs: &mut [Process],
+    gpu_history: &mut GpuHistory,
+    secs: f64,
+    cpus: usize,
+    instantaneous_gpu: &HashMap<u32, f32>,
+) {
+    if secs <= 0.0 {
+        return;
+    }
+    for process in &mut *procs {
+        process.gpu = gpu_history.rate(process.pid, secs);
+    }
+    log.record(procs, secs, cpus);
+    for process in procs {
+        process.gpu = instantaneous_gpu.get(&process.pid).copied().unwrap_or(0.0);
+    }
+    gpu_history.clear_recorded();
+}
+
 
 /// Samples on a background thread and pushes updates into visible UI surfaces.
 /// Per-process data is only collected while the main window needs it or history is enabled.
@@ -486,6 +616,8 @@ fn spawn_sampler(
             let mut histories = bridge::Histories::default();
             let mut view = processes::View::default();
             let mut gpu_sampler = GpuSampler::new();
+            let mut history_gpu = GpuHistory::default();
+            let mut last_gpu_sample = Instant::now();
             let mut page = Page::Performance;
             let mut perf_tab = 0;
             let mut last: (Snapshot, Vec<Process>) = Default::default();
@@ -505,13 +637,21 @@ fn spawn_sampler(
             let mut main_visible = main_visible;
             let mut widgets_visible = widgets_visible;
 
+            let mut icons = app_icons::IconStore::new();
+            let mut registry: Option<taskmonitor_core::apps::Registry> = None;
+            let mut top_bar: Option<tray::Tray> = None;
             let push_rows = |view: &processes::View,
                              page: Page,
                              last: &(Snapshot, Vec<Process>),
-                             gpu_total: f32| {
-                let rows = view.build(page, &last.1, &last.0, gpu_total);
-                ui.upgrade_in_event_loop(move |ui| processes::apply(&ui, rows))
-                    .is_ok()
+                             gpu_total: f32,
+                             icons: &mut app_icons::IconStore| {
+                let rows = view.build(page, &last.1, &last.0, gpu_total, icons);
+                let new_icons = icons.take_pending();
+                ui.upgrade_in_event_loop(move |ui| {
+                    app_icons::apply(&ui, new_icons);
+                    processes::apply(&ui, rows);
+                })
+                .is_ok()
             };
 
             loop {
@@ -526,12 +666,28 @@ fn spawn_sampler(
                         let resumed = interval.is_none() && ms > 0;
                         interval = (ms > 0).then(|| Duration::from_millis(ms));
                         wait = interval;
-                        if resumed {
-                            // Reset the baseline so the first rate after a pause isn't averaged over it.
+                        if interval.is_none() {
+                            history_gpu.rebaseline();
+                            // Release NVML and discard the interval that starts while paused.
+                            let _ = sample_gpu(
+                                &mut gpu_sampler,
+                                false,
+                                &mut last_gpu_sample,
+                                None,
+                            );
+                        } else if resumed {
+                            // Reset baselines so paused time is never attributed to history.
                             sampler.sample();
                             if let Some(p) = procs_sampler.as_mut() {
                                 p.sample();
                             }
+                            history_gpu.rebaseline();
+                            let _ = sample_gpu(
+                                &mut gpu_sampler,
+                                false,
+                                &mut last_gpu_sample,
+                                usage_log.is_some().then_some(&mut history_gpu),
+                            );
                         }
                         continue;
                     }
@@ -540,7 +696,7 @@ fn spawn_sampler(
                             Cmd::Page(p) => {
                                 page = p;
                                 if main_visible && p == Page::Startup {
-                                    push_startup(&ui);
+                                    push_startup(&ui, &mut icons);
                                 }
                                 if main_visible && p == Page::Services {
                                     let svc = services.get_or_insert_with(Services::new);
@@ -548,7 +704,7 @@ fn spawn_sampler(
                                         push_services(&ui, svc, service_bus, &view.filter);
                                 }
                                 if main_visible && p == Page::History {
-                                    push_history(&ui, usage_log.as_ref());
+                                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 }
                                 // Sample right away so the table isn't empty for a whole interval.
                                 if main_visible && shows_procs(p) {
@@ -605,7 +761,7 @@ fn spawn_sampler(
                                     Err(e) => Some(format!("Couldn't change startup setting: {e}")),
                                 };
                                 if main_visible {
-                                    push_startup(&ui);
+                                    push_startup(&ui, &mut icons);
                                     if let Some(msg) = msg {
                                         let _ = ui.upgrade_in_event_loop(move |ui| {
                                             ui.set_toast(msg.into())
@@ -619,13 +775,30 @@ fn spawn_sampler(
                                 continue;
                             }
                             Cmd::History(on) => {
-                                if on && usage_log.is_none() {
+                                let changed = if on && usage_log.is_none() {
                                     usage_log = Some(AppUsageLog::load(&history_path));
+                                    true
                                 } else if !on && let Some(log) = usage_log.take() {
                                     let _ = log.save(&history_path);
+                                    true
+                                } else {
+                                    false
+                                };
+                                if changed {
+                                    history_gpu.rebaseline();
+                                    if on {
+                                        let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
+                                        last.1 = ps.sample();
+                                        let _ = sample_gpu(
+                                            &mut gpu_sampler,
+                                            false,
+                                            &mut last_gpu_sample,
+                                            Some(&mut history_gpu),
+                                        );
+                                    }
                                 }
                                 if main_visible {
-                                    push_history(&ui, usage_log.as_ref());
+                                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 }
                                 continue;
                             }
@@ -634,25 +807,64 @@ fn spawn_sampler(
                                     let log = AppUsageLog::default();
                                     let _ = log.save(&history_path);
                                     usage_log = Some(log);
+                                    history_gpu.rebaseline();
+                                    let _ = sample_gpu(
+                                        &mut gpu_sampler,
+                                        false,
+                                        &mut last_gpu_sample,
+                                        Some(&mut history_gpu),
+                                    );
                                 }
                                 if main_visible {
-                                    push_history(&ui, usage_log.as_ref());
+                                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 }
                                 continue;
                             }
                             Cmd::MainVisible(visible) => {
                                 if !visible {
                                     // `sample(false)` releases NVML immediately without waking NVIDIA.
-                                    let _ = gpu_sampler.sample(false);
+                                    if interval.is_some() {
+                                        let _ = sample_gpu(
+                                            &mut gpu_sampler,
+                                            false,
+                                            &mut last_gpu_sample,
+                                            usage_log.is_some().then_some(&mut history_gpu),
+                                        );
+                                    } else {
+                                        history_gpu.rebaseline();
+                                        let _ = sample_gpu(
+                                            &mut gpu_sampler,
+                                            false,
+                                            &mut last_gpu_sample,
+                                            None,
+                                        );
+                                    }
                                 }
                                 main_visible = visible;
                                 if main_visible && page == Page::History {
-                                    push_history(&ui, usage_log.as_ref());
+                                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
                                 }
                                 continue;
                             }
                             Cmd::WidgetsVisible(visible) => {
                                 widgets_visible = visible;
+                                continue;
+                            }
+                            Cmd::TopBar(on) => {
+                                if !on {
+                                    top_bar = None;
+                                } else if top_bar.is_none() {
+                                    match tray::Tray::start(ui.clone()) {
+                                        Ok(t) => top_bar = Some(t),
+                                        Err(e) => {
+                                            let msg = format!("Can't show stats in the top bar: {e}");
+                                            let _ = ui.upgrade_in_event_loop(move |ui| {
+                                                ui.set_top_bar_stats(false);
+                                                ui.set_toast(msg.into());
+                                            });
+                                        }
+                                    }
+                                }
                                 continue;
                             }
                             Cmd::Quit => {
@@ -678,7 +890,7 @@ fn spawn_sampler(
                         }
                         if main_visible
                             && shows_procs(page)
-                            && !push_rows(&view, page, &last, gpu_total)
+                            && !push_rows(&view, page, &last, gpu_total, &mut icons)
                         {
                             main_visible = false;
                         }
@@ -699,17 +911,28 @@ fn spawn_sampler(
                     }
                 }
                 // Keep DRM per-process rates aligned with history records while the main
-                // window is hidden, but only request NVIDIA detail for the visible main view.
+                // window is hidden. The top bar uses the low-detail path, which releases
+                // NVML and therefore does not wake a sleeping NVIDIA GPU.
                 let history_record_due = usage_log.is_some() && (tick + 1).is_multiple_of(5);
-                let (gpus, gpu_per_pid) = if main_visible || history_record_due {
-                    let gpu_detail = main_visible
-                        && (page == Page::Processes
-                            || (page == Page::Performance && perf_tab == 2));
-                    gpu_sampler.sample(gpu_detail)
-                } else {
-                    Default::default()
-                };
+                let (gpus, gpu_per_pid) =
+                    if main_visible || history_record_due || top_bar.is_some() {
+                        let gpu_detail = main_visible
+                            && (page == Page::Processes
+                                || (page == Page::Performance && perf_tab == 2));
+                        sample_gpu(
+                            &mut gpu_sampler,
+                            gpu_detail,
+                            &mut last_gpu_sample,
+                            usage_log.is_some().then_some(&mut history_gpu),
+                        )
+                    } else {
+                        Default::default()
+                    };
                 gpu_total = gpus.iter().filter_map(|g| g.usage).fold(0.0, f32::max);
+                if let Some(t) = top_bar.as_mut() {
+                    let gpu = gpus.iter().filter_map(|g| g.usage).reduce(f32::max);
+                    t.set_label(tray::label(snap.cpu_usage, snap.memory.used(), gpu));
+                }
                 if main_visible {
                     let update = bridge::build(&snap, &gpus, &mut histories);
                     if ui
@@ -723,7 +946,11 @@ fn spawn_sampler(
                 tick += 1;
                 // App history needs process samples even when no process page is open,
                 // but every 5th tick is enough: it accumulates rates times elapsed time.
-                let sample_procs = (main_visible && shows_procs(page)) || history_record_due;
+                // The Performance page's Disk activity card needs processes too; every
+                // 2nd tick is plenty for it (rates average over the time between samples).
+                let sample_procs = (main_visible
+                    && (shows_procs(page) || (page == Page::Performance && tick.is_multiple_of(2))))
+                    || history_record_due;
                 if sample_procs {
                     let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
                     last.1 = ps.sample();
@@ -731,7 +958,14 @@ fn spawn_sampler(
                         p.gpu = gpu_per_pid.get(&p.pid).copied().unwrap_or(0.0);
                     }
                     if let Some(log) = usage_log.as_mut() {
-                        log.record(&last.1, ps.last_interval, cpus);
+                        record_history(
+                            log,
+                            &mut last.1,
+                            &mut history_gpu,
+                            ps.last_interval,
+                            cpus,
+                            &gpu_per_pid,
+                        );
                     }
                 }
                 if let Some(log) = &usage_log
@@ -740,10 +974,21 @@ fn spawn_sampler(
                     let _ = log.save(&history_path);
                     last_save = std::time::Instant::now();
                 }
-                if main_visible && page == Page::History {
-                    push_history(&ui, usage_log.as_ref());
+                if main_visible && sample_procs && page == Page::Performance {
+                    let rows = processes::disk_rows(&last.1, &mut icons);
+                    let new_icons = icons.take_pending();
+                    let _ = ui.upgrade_in_event_loop(move |ui| {
+                        app_icons::apply(&ui, new_icons);
+                        bridge::sync(ui.get_disk_procs(), rows, |m| ui.set_disk_procs(m));
+                    });
                 }
-                if main_visible && shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
+                if main_visible && page == Page::History {
+                    push_history(&ui, usage_log.as_ref(), &mut icons, &mut registry);
+                }
+                if main_visible
+                    && shows_procs(page)
+                    && !push_rows(&view, page, &last, gpu_total, &mut icons)
+                {
                     main_visible = false;
                 }
                 if main_visible && page == Page::Services {
@@ -779,14 +1024,12 @@ fn run_action(ui: &slint::Weak<MainWindow>, action: &str, key: &str, procs: Vec<
 }
 
 fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
-    let Some(&pid) = actions::pids_for_key(key, procs).first() else {
-        return;
-    };
-    let title = format!(
-        "{} (PID {pid})",
-        actions::name_for_key(&format!("pid:{pid}"), procs)
-    );
-    let facts: Vec<Metric> = taskmonitor_core::actions::info(pid)
+    let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
+    let title = format!("{} (PID {pid})", actions::name_for_key(&format!("pid:{pid}"), procs));
+    let info = taskmonitor_core::actions::info(pid);
+    let all_text: String =
+        std::iter::once(title.clone()).chain(info.iter().map(|(l, v)| format!("{l}: {v}"))).collect::<Vec<_>>().join("\n");
+    let facts: Vec<Metric> = info
         .into_iter()
         .map(|(label, value)| Metric {
             label: label.into(),
@@ -795,6 +1038,7 @@ fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
         })
         .collect();
     let _ = ui.upgrade_in_event_loop(move |ui| {
+        ui.set_props_text(all_text.into());
         ui.set_props_title(title.into());
         ui.set_props(ModelRc::new(VecModel::from(facts)));
         ui.set_props_open(true);
@@ -840,10 +1084,12 @@ fn push_services(
     list
 }
 
-fn push_startup(ui: &slint::Weak<MainWindow>) {
-    let rows = system_pages::startup_rows(&taskmonitor_core::startup::list());
+fn push_startup(ui: &slint::Weak<MainWindow>, icons: &mut app_icons::IconStore) {
+    let rows = system_pages::startup_rows(&taskmonitor_core::startup::list(), icons);
+    let new_icons = icons.take_pending();
     let _ = ui.upgrade_in_event_loop(move |ui| {
-        bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m))
+        app_icons::apply(&ui, new_icons);
+        bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m));
     });
 }
 
@@ -900,15 +1146,131 @@ fn dbus_error(e: &zbus::Error) -> String {
     }
 }
 
-fn push_history(ui: &slint::Weak<MainWindow>, log: Option<&AppUsageLog>) {
-    let (rows, since) = log.map_or_else(Default::default, |l| {
-        (
-            system_pages::history_rows(l),
-            system_pages::since_text(l.since),
-        )
-    });
+fn push_history(
+    ui: &slint::Weak<MainWindow>,
+    log: Option<&AppUsageLog>,
+    icons: &mut app_icons::IconStore,
+    registry: &mut Option<taskmonitor_core::apps::Registry>,
+) {
+    let (rows, since) = match log {
+        Some(l) => {
+            let apps = registry.get_or_insert_with(taskmonitor_core::apps::Registry::load);
+            (system_pages::history_rows(l, icons, apps), system_pages::since_text(l.since))
+        }
+        None => Default::default(),
+    };
+    let new_icons = icons.take_pending();
     let _ = ui.upgrade_in_event_loop(move |ui| {
+        app_icons::apply(&ui, new_icons);
         bridge::sync(ui.get_history_rows(), rows, |m| ui.set_history_rows(m));
         ui.set_history_since(since.into());
     });
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+fn last_checked_text(when: u64) -> String {
+    if when == 0 {
+        return "Not checked yet.".into();
+    }
+    let ago = unix_now().saturating_sub(when);
+    let ago = match ago {
+        0..120 => "just now".to_owned(),
+        120..7200 => format!("{} minutes ago", ago / 60),
+        7200..172_800 => format!("{} hours ago", ago / 3600),
+        _ => format!("{} days ago", ago / 86_400),
+    };
+    format!("You're up to date. Last checked {ago}.")
+}
+
+/// Runs the update check on its own thread (it waits on the network). `manual` checks
+/// report every outcome; automatic ones stay quiet unless there's an update.
+fn check_for_updates(ui: slint::Weak<MainWindow>, manual: bool) {
+    let _ = ui.upgrade_in_event_loop(|ui| ui.set_checking_updates(true));
+    std::thread::spawn(move || {
+        // Dev aid: TASKMONITOR_PRETEND_VERSION=0.0.1 shows the "update available" state.
+        let current = std::env::var("TASKMONITOR_PRETEND_VERSION").unwrap_or_else(|_| env!("CARGO_PKG_VERSION").into());
+        let result = updates::check(&current);
+        if result.is_ok() {
+            settings::set_last_update_check(unix_now());
+        }
+        let _ = ui.upgrade_in_event_loop(move |ui| {
+            ui.set_checking_updates(false);
+            match result {
+                Ok(updates::Outcome::Available(release)) => {
+                    ui.set_update_status(
+                        "Download the package for your system from the release page, then install it as before.".into(),
+                    );
+                    ui.set_update_version(release.version.as_str().into());
+                    ui.set_update_url(release.url.into());
+                    ui.set_toast(format!("TaskMonitor {} is available", release.version).into());
+                }
+                Ok(updates::Outcome::UpToDate) => {
+                    ui.set_update_status(last_checked_text(unix_now()).into());
+                    if manual {
+                        ui.set_toast("TaskMonitor is up to date".into());
+                    }
+                }
+                Err(e) => {
+                    ui.set_update_status(format!("Couldn't check for updates: {e}.").into());
+                    if manual {
+                        ui.set_toast(format!("Couldn't check for updates: {e}").into());
+                    }
+                }
+            }
+        });
+    });
+}
+
+#[cfg(test)]
+mod gpu_history_tests {
+    use super::*;
+
+    fn rates(pid: u32, rate: f32) -> HashMap<u32, f32> {
+        HashMap::from([(pid, rate)])
+    }
+
+    #[test]
+    fn integrates_only_the_final_busy_second() {
+        let mut history = GpuHistory::default();
+        history.observe(&HashMap::new(), 0.0); // baseline
+        for rate in [0.0, 0.0, 0.0, 0.0, 1.0] {
+            history.observe(&rates(42, rate), 1.0);
+        }
+
+        assert!((history.rate(42, 5.0) as f64 * 5.0 - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn retains_busy_time_when_the_final_sample_is_idle() {
+        let mut history = GpuHistory::default();
+        history.observe(&HashMap::new(), 0.0); // baseline
+        history.observe(&rates(42, 1.0), 1.0);
+        history.observe(&rates(42, 0.5), 2.0);
+        history.observe(&rates(42, 0.0), 2.0);
+
+        assert!((history.rate(42, 5.0) as f64 * 5.0 - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn preserves_busy_seconds_when_process_interval_is_shorter() {
+        let mut history = GpuHistory::default();
+        history.observe(&HashMap::new(), 0.0); // baseline
+        history.observe(&rates(42, 1.0), 1.0);
+
+        assert!((history.rate(42, 0.2) as f64 * 0.2 - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rebaseline_discards_paused_or_disabled_time() {
+        let mut history = GpuHistory::default();
+        history.observe(&HashMap::new(), 0.0); // baseline
+        history.observe(&rates(42, 1.0), 2.0);
+        history.rebaseline();
+        history.observe(&rates(42, 1.0), 2.0); // new baseline
+
+        assert_eq!(history.rate(42, 2.0), 0.0);
+    }
 }

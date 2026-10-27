@@ -243,10 +243,12 @@ mod tests {
             memory: 0,
             read_bps: 0.0,
             write_bps: 0.0,
+            io_total: None,
             threads: 1,
             nice: 0,
             efficiency: false,
             gpu: 0.0,
+            icon: None,
             group: Group::Background,
         }];
         assert_eq!(perform(&Action::End, "bg:sleep", &procs), "Ended sleep");

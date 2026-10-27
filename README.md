@@ -6,26 +6,38 @@
 
 <p align="center">A modern, lightweight task manager for Linux: everything Windows Task Manager does, in a clean card-based UI.</p>
 
+<p align="center">
+  <a href="https://discord.gg/NpS9WmSW23"><img src="https://img.shields.io/badge/Join%20us%20on-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join us on Discord"></a>
+  <a href="https://ko-fi.com/V8G5225SN8"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="28" alt="Support me on Ko-fi"></a>
+</p>
+
 ![Processes](docs/screenshots/processes.png)
 
-| Performance | Services |
+| Performance | Dark theme |
 |---|---|
-| ![Performance](docs/screenshots/performance.png) | ![Services](docs/screenshots/services.png) |
-| **Startup apps** | **Dark theme** |
-| ![Startup apps](docs/screenshots/startup.png) | ![Dark theme](docs/screenshots/performance-dark.png) |
+| ![Performance](docs/screenshots/performance.png) | ![Performance in the dark theme](docs/screenshots/performance-dark.png) |
+| **Services** | **Startup apps** |
+| ![Services](docs/screenshots/services.png) | ![Startup apps](docs/screenshots/startup.png) |
+| **Details** | **Settings** |
+| ![Details](docs/screenshots/details.png) | ![Settings](docs/screenshots/settings.png) |
 
 ## Features
 
 - **Processes**: apps (detected from their desktop entries), background and system processes, grouped and expandable, with CPU, memory, disk and GPU use, heat-map cells, sorting and search.
 - **Performance**: live CPU (total and per thread), memory, every disk and network adapter, and GPUs (Intel and AMD through the kernel, NVIDIA through NVML).
 - **Desktop widgets**: a compact CPU, memory, disk and network panel that keeps running when the main window is closed.
-- **Process actions** (right-click): End task, End process tree, Kill, Suspend/Resume, Efficiency mode, priority, CPU affinity, Open file location, Properties, Run new task. Actions on other users' processes ask for your password through polkit.
-- **Details**: every process, kernel threads included, with PID, user, threads, nice value and command line.
+- **Process actions**: the **End task** split button keeps SIGTERM (15) as its main action. Its dropdown offers End task (SIGTERM, 15), Kill process (SIGKILL, 9, with confirmation), Suspend (SIGSTOP), and Resume (SIGCONT) on both Processes and Details. Right-click for those actions plus End process tree, Efficiency mode, priority, CPU affinity, Open file location, Properties, and Run new task. Actions on other users' processes ask for your password through polkit.
+- **Details**: every process, kernel threads included, with PID, user, disk read and write, threads, nice value and command line.
+- **Disk activity** on the Performance page: the processes reading and writing the most right now.
+- **Properties** for any process, with a copy button on every value and Copy all.
 - **Services**: system and user systemd services; start, stop, restart, enable and disable.
 - **Startup apps**: switch autostart entries on and off.
 - **Users**: signed-in sessions with per-user CPU and memory; lock or sign out.
 - **App history** (opt-in): CPU, disk and GPU time per app, kept only on your computer.
-- Light and dark themes, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Ctrl+W closes the main window, Delete ends the selected task, Esc closes dialogs).
+- **Top-bar stats**: one click puts live CPU, RAM and GPU use in your desktop's top bar (system tray). On Ubuntu/GNOME the numbers show next to the icon; on KDE they show when you hover it.
+- **App icons** from your icon theme, with initials for processes that have none.
+- **Update checker**: once a day (or on demand in Settings) TaskMonitor asks GitHub whether a newer version exists and shows an "Update" pill in the top bar if so. It never installs anything by itself, and it can be turned off.
+- Light and dark themes, sidebar icon tooltips, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Ctrl+W closes the main window, Delete ends the selected task, Esc closes dialogs).
 
 TaskMonitor is written in Rust with [Slint](https://slint.dev). It uses about 1–2% of one CPU core and around 35 MB of memory, and it doesn't wake a sleeping laptop GPU.
 
@@ -92,6 +104,10 @@ Build every package into `dist/` (also needs `zig`, `squashfs-tools`, `cargo ins
 - UI toolkit: [Slint](https://slint.dev)
 - Font: [Mona Sans](https://github.com/github/mona-sans) (SIL Open Font License)
 - Icons: [Lucide](https://lucide.dev) (ISC License)
+
+## Support the project
+
+TaskMonitor is free and open source. If it's useful to you, you can [buy me a coffee on Ko-fi](https://ko-fi.com/anujdhakal). See [DONATE.md](DONATE.md) for other ways to help.
 
 ## License
 

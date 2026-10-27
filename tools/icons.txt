@@ -27,3 +27,15 @@ play           play
 chevron-down   chevron-down
 chevron-up     chevron-up
 chevron-right  chevron-right
+top-bar        panel-top
+copy           copy
+check          check
+monitor        monitor
+palette        palette
+keyboard       keyboard
+privacy        shield-check
+info           info
+external       external-link
+bug            bug
+behaviour      sliders-horizontal
+download       download
