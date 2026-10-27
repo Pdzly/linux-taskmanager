@@ -1,0 +1,372 @@
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Icon } from "components.slint";
+import { Icons } from "icons.slint";
+
+component ProgressBar inherits Rectangle {
+    in property <float> value;
+    in property <color> fill: Theme.accent;
+
+    height: 7px;
+    border-radius: self.height / 2;
+    background: Theme.line;
+    clip: true;
+
+    Rectangle {
+        width: parent.width * clamp(root.value, 0, 1);
+        height: parent.height;
+        border-radius: parent.border-radius;
+        background: root.fill;
+    }
+}
+
+component UsageCard inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> value;
+    in property <string> detail;
+    in property <float> progress;
+    preferred-width: 0px;
+
+    background: Theme.card;
+    border-radius: Theme.radius-tile;
+    border-width: 1px;
+    border-color: Theme.line;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 7px;
+            Icon { glyph: root.icon; size: 15px; tint: Theme.accent-strong; }
+            Text {
+                text: root.label;
+                color: Theme.text-2;
+                font-size: 12px;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: root.value;
+            color: Theme.text;
+            font-family: Theme.mono;
+            font-size: 27px;
+            font-weight: 500;
+            letter-spacing: -1px;
+            overflow: elide;
+        }
+        Text {
+            text: root.detail;
+            color: Theme.text-2;
+            font-size: 11.5px;
+            overflow: elide;
+            vertical-alignment: center;
+            vertical-stretch: 1;
+        }
+        ProgressBar { value: root.progress; }
+    }
+}
+
+component RateCard inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> first-label;
+    in property <string> first-value;
+    in property <string> second-label;
+    in property <string> second-value;
+    preferred-width: 0px;
+
+    background: Theme.card;
+    border-radius: Theme.radius-tile;
+    border-width: 1px;
+    border-color: Theme.line;
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 9px;
+
+        HorizontalLayout {
+            spacing: 7px;
+            Icon { glyph: root.icon; size: 15px; tint: Theme.accent-strong; }
+            Text {
+                text: root.label;
+                color: Theme.text-2;
+                font-size: 12px;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: root.first-label;
+                color: Theme.text-2;
+                font-size: 11.5px;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.first-value;
+                color: Theme.text;
+                font-family: Theme.mono;
+                font-size: 13px;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Text {
+                text: root.second-label;
+                color: Theme.text-2;
+                font-size: 11.5px;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.second-value;
+                color: Theme.text;
+                font-family: Theme.mono;
+                font-size: 13px;
+                overflow: elide;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+}
+
+component ActionButton inherits Rectangle {
+    // `label` is the complete accessible action name; the visible caption may be shorter.
+    in property <string> label;
+    in property <string> caption: label;
+    in property <string> icon;
+    in property <bool> danger;
+    callback clicked;
+
+    height: 34px;
+    border-radius: 9px;
+    background: ta.has-hover ? (root.danger ? Theme.danger.darker(0.10) : Theme.hover) : Theme.tile;
+    border-width: focus.has-focus ? 1.5px : 0px;
+    border-color: Theme.accent-strong;
+    animate background { duration: 120ms; }
+
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => { root.clicked(); }
+    forward-focus: focus;
+
+    HorizontalLayout {
+        y: (root.height - self.height) / 2;
+        height: 14px;
+        padding-left: 9px;
+        padding-right: 9px;
+        spacing: 5px;
+        alignment: center;
+        Icon { glyph: root.icon; size: 13px; tint: root.danger ? Theme.danger : Theme.text-2; }
+        Text {
+            text: root.caption;
+            color: root.danger ? Theme.danger : Theme.text;
+            font-size: 10.5px;
+            font-weight: 500;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+    focus := FocusScope {
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                ta.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            focus.focus();
+            root.clicked();
+        }
+    }
+}
+
+export component DesktopWidgets inherits Window {
+    title: "TaskMonitor Desktop Widgets";
+    always-on-top: true;
+    no-frame: true;
+    preferred-width: 390px;
+    preferred-height: 390px;
+    min-width: 340px;
+    min-height: 360px;
+    background: transparent;
+    default-font-family: "Mona Sans";
+    default-font-size: 14px;
+
+    // 0 desktop, 1 light, 2 dark. This global is separate from MainWindow's.
+    in-out property <int> theme-choice;
+    changed theme-choice => {
+        Theme.dark = self.theme-choice == 2 || (self.theme-choice == 0 && Palette.color-scheme == ColorScheme.dark);
+    }
+    in property <bool> paused;
+    callback open-main();
+    callback dismiss();
+    callback quit();
+
+    // Set by widgets::Update. Keep initial values neutral until the first sample.
+    in property <string> cpu-value: "—";
+    in property <string> cpu-detail: "Waiting for sample";
+    in property <float> cpu-progress;
+    in property <string> memory-value: "—";
+    in property <string> memory-detail: "Waiting for sample";
+    in property <float> memory-progress;
+    in property <string> disk-read: "—";
+    in property <string> disk-write: "—";
+    in property <string> network-receive: "—";
+    in property <string> network-send: "—";
+
+    Rectangle {
+        x: 6px;
+        y: 6px;
+        width: parent.width - 12px;
+        height: parent.height - 12px;
+        background: Theme.panel;
+        border-radius: Theme.radius-card;
+        border-width: 1px;
+        border-color: Theme.outline;
+        drop-shadow-blur: 18px;
+        drop-shadow-offset-y: 4px;
+        drop-shadow-color: Theme.shadow;
+
+        VerticalLayout {
+            padding: 14px;
+            spacing: 10px;
+
+            Rectangle {
+                height: 30px;
+                background: transparent;
+                WindowMoveArea {
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Icon { glyph: Icons.performance; size: 16px; tint: Theme.accent-strong; }
+                        Text {
+                            text: "TaskMonitor";
+                            color: Theme.text;
+                            font-size: 13px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "Drag to move";
+                            color: Theme.text-2;
+                            font-size: 11.5px;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Rectangle {
+                            width: 56px;
+                            height: 20px;
+                            border-radius: 10px;
+                            background: root.paused ? Theme.danger.with-alpha(0.16) : Theme.ok.with-alpha(0.14);
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: root.paused ? "PAUSED" : "LIVE";
+                                color: root.paused ? Theme.danger : Theme.ok;
+                                font-size: 9px;
+                                font-weight: 600;
+                                letter-spacing: 0.5px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 10px;
+                vertical-stretch: 1;
+                HorizontalLayout {
+                    spacing: 10px;
+                    vertical-stretch: 1;
+                    UsageCard {
+                        min-width: 0px;
+                        horizontal-stretch: 1;
+                        icon: Icons.cpu;
+                        label: "CPU";
+                        value: root.cpu-value;
+                        detail: root.cpu-detail;
+                        progress: root.cpu-progress;
+                    }
+                    UsageCard {
+                        min-width: 0px;
+                        horizontal-stretch: 1;
+                        icon: Icons.memory;
+                        label: "Memory";
+                        value: root.memory-value;
+                        detail: root.memory-detail;
+                        progress: root.memory-progress;
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 10px;
+                    vertical-stretch: 1;
+                    RateCard {
+                        min-width: 0px;
+                        horizontal-stretch: 1;
+                        icon: Icons.disk;
+                        label: "Disk I/O";
+                        first-label: "Read";
+                        first-value: root.disk-read;
+                        second-label: "Write";
+                        second-value: root.disk-write;
+                    }
+                    RateCard {
+                        min-width: 0px;
+                        horizontal-stretch: 1;
+                        icon: Icons.ethernet;
+                        label: "Network";
+                        first-label: "Receive";
+                        first-value: root.network-receive;
+                        second-label: "Send";
+                        second-value: root.network-send;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                height: 34px;
+                spacing: 7px;
+                ActionButton {
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    label: "Open TaskMonitor";
+                    caption: "Open";
+                    icon: Icons.open;
+                    clicked => { root.open-main(); }
+                }
+                ActionButton {
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    label: "Hide widgets";
+                    caption: "Hide";
+                    icon: Icons.close;
+                    clicked => { root.dismiss(); }
+                }
+                ActionButton {
+                    min-width: 0px;
+                    horizontal-stretch: 1;
+                    label: "Quit TaskMonitor";
+                    caption: "Quit";
+                    icon: Icons.close;
+                    danger: true;
+                    clicked => { root.quit(); }
+                }
+            }
+        }
+    }
+}

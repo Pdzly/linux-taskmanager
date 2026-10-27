@@ -12,11 +12,19 @@ pub struct Settings {
     pub start_page: String,
     pub always_on_top: bool,
     pub app_history: bool,
+    pub desktop_widgets: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { theme: 0, refresh: 1, start_page: "processes".into(), always_on_top: false, app_history: false }
+        Self {
+            theme: 0,
+            refresh: 1,
+            start_page: "processes".into(),
+            always_on_top: false,
+            app_history: false,
+            desktop_widgets: false,
+        }
     }
 }
 
@@ -42,6 +50,7 @@ impl Settings {
                 "start_page" => s.start_page = value.to_owned(),
                 "always_on_top" => s.always_on_top = value == "true",
                 "app_history" => s.app_history = value == "true",
+                "desktop_widgets" => s.desktop_widgets = value == "true",
                 _ => {}
             }
         }
@@ -54,8 +63,8 @@ impl Settings {
             fs::create_dir_all(dir)?;
         }
         let text = format!(
-            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\n",
-            self.theme, self.refresh, self.start_page, self.always_on_top, self.app_history
+            "# TaskMonitor settings\ntheme = {}\nrefresh = {}\nstart_page = {}\nalways_on_top = {}\napp_history = {}\ndesktop_widgets = {}\n",
+            self.theme, self.refresh, self.start_page, self.always_on_top, self.app_history, self.desktop_widgets
         );
         fs::write(path, text)
     }
@@ -67,8 +76,8 @@ mod tests {
 
     #[test]
     fn parses_with_defaults_and_clamping() {
-        let s = Settings::parse("theme = 2\nrefresh = 99\napp_history = true\nunknown = x\n");
-        assert_eq!(s, Settings { theme: 2, refresh: 4, app_history: true, ..Default::default() });
+        let s = Settings::parse("theme = 2\nrefresh = 99\napp_history = true\ndesktop_widgets = true\nunknown = x\n");
+        assert_eq!(s, Settings { theme: 2, refresh: 4, app_history: true, desktop_widgets: true, ..Default::default() });
         assert_eq!(Settings::parse(""), Settings::default());
     }
 }

@@ -9,7 +9,7 @@ import "../fonts/lucide-subset.ttf";
 import { Theme, Page } from "theme.slint";
 import { Palette } from "std-widgets.slint";
 import { Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow } from "types.slint";
-export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow }
+export { Theme, Page, Summary, CpuView, MemView, DeviceView, SysView, Metric, ProcRow, ProcTotals, DetailRow, ServiceRow, StartupRow, UserRow, HistoryRow, DesktopWidgets }
 import { Rail, TopBar } from "shell.slint";
 import { Logo } from "components.slint";
 import { PerformancePage } from "pages/performance.slint";
@@ -21,6 +21,7 @@ import { StartupPage } from "pages/startup.slint";
 import { UsersPage } from "pages/users.slint";
 import { HistoryPage } from "pages/history.slint";
 import { SettingsPage } from "pages/settings.slint";
+import { DesktopWidgets } from "desktop-widgets.slint";
 
 export component MainWindow inherits Window {
     title: "TaskMonitor";
@@ -82,8 +83,10 @@ export component MainWindow inherits Window {
     in-out property <int> refresh-index: 1;
     in-out property <int> start-page;
     in-out property <bool> app-history;
+    in-out property <bool> desktop-widgets;
     callback settings-changed();
     callback clear-history();
+    callback close-main();
     in-out property <bool> on-top;
     always-on-top: root.on-top;
 
@@ -123,6 +126,10 @@ export component MainWindow inherits Window {
     forward-focus: keys;
     keys := FocusScope {
         key-pressed(event) => {
+            if event.modifiers.control && event.text == "w" {
+                root.close-main();
+                return accept;
+            }
             if event.modifiers.control {
                 if event.text == "1" { root.go(Page.processes); return accept; }
                 if event.text == "2" { root.go(Page.performance); return accept; }
@@ -280,6 +287,7 @@ export component MainWindow inherits Window {
                     start-page <=> root.start-page;
                     always-on-top <=> root.on-top;
                     app-history <=> root.app-history;
+                    desktop-widgets <=> root.desktop-widgets;
                     version: root.version;
                     changed => { root.settings-changed(); }
                 }

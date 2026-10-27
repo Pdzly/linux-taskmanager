@@ -18,15 +18,32 @@
 
 - **Processes**: apps (detected from their desktop entries), background and system processes, grouped and expandable, with CPU, memory, disk and GPU use, heat-map cells, sorting and search.
 - **Performance**: live CPU (total and per thread), memory, every disk and network adapter, and GPUs (Intel and AMD through the kernel, NVIDIA through NVML).
+- **Desktop widgets**: a compact CPU, memory, disk and network panel that keeps running when the main window is closed.
 - **Process actions** (right-click): End task, End process tree, Kill, Suspend/Resume, Efficiency mode, priority, CPU affinity, Open file location, Properties, Run new task. Actions on other users' processes ask for your password through polkit.
 - **Details**: every process, kernel threads included, with PID, user, threads, nice value and command line.
 - **Services**: system and user systemd services; start, stop, restart, enable and disable.
 - **Startup apps**: switch autostart entries on and off.
 - **Users**: signed-in sessions with per-user CPU and memory; lock or sign out.
 - **App history** (opt-in): CPU, disk and GPU time per app, kept only on your computer.
-- Light and dark themes, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Delete ends the selected task, Esc closes dialogs).
+- Light and dark themes, adjustable refresh rate, keyboard shortcuts (Ctrl+1–7 for pages, Ctrl+W closes the main window, Delete ends the selected task, Esc closes dialogs).
 
 TaskMonitor is written in Rust with [Slint](https://slint.dev). It uses about 1–2% of one CPU core and around 35 MB of memory, and it doesn't wake a sleeping laptop GPU.
+
+## Desktop widgets
+
+Enable **Settings → Desktop widgets** to show the panel. Closing the main window, including with **Ctrl+W**, leaves the widgets running. They share TaskMonitor's theme and update speed; choosing **Paused** freezes their readings too.
+
+Start with only the widgets, without opening the main window:
+
+```sh
+taskmonitor --widgets
+# From source:
+cargo run --release -p taskmonitor -- --widgets
+```
+
+Drag the panel's header to move it. Its **Open**, **Hide**, and **Quit** buttons reopen TaskMonitor, disable the widgets, and quit the entire application respectively. Hiding the widgets also exits TaskMonitor if its main window is already closed. The widget setting is remembered between launches; enabling it does not add a login autostart entry.
+
+On X11, the panel stays above normal windows. Wayland compositors control window placement, so they may not honor the always-on-top request.
 
 ## Install
 

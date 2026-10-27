@@ -5,11 +5,14 @@ mod format;
 mod processes;
 mod settings;
 mod system_pages;
+mod widgets;
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
 
-use slint::{Model, ModelRc, SharedString, VecModel};
+use slint::{CloseRequestResponse, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use taskmonitor_core::app_usage::{self, AppUsageLog};
 use taskmonitor_core::services::{Bus, Service, Services};
 use taskmonitor_core::users::{Logind, Session};
@@ -25,7 +28,10 @@ fn main() -> Result<(), slint::PlatformError> {
         bench::run();
         return Ok(());
     }
+
+    let widget_only = std::env::args().skip(1).any(|arg| arg == "--widgets");
     let ui = MainWindow::new()?;
+    let desktop_widgets = widgets::create()?;
     // Lets the desktop match the window to io.github.taskmonitor.desktop (name and icon).
     // Needs the platform that MainWindow::new() set up, and must happen before showing.
     slint::set_xdg_app_id("io.github.taskmonitor")?;
@@ -36,18 +42,17 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_user_name(user.into());
     ui.set_user_initials(initials.into());
 
-    let (tx, sampler_thread) = spawn_sampler(ui.as_weak());
-    let quit = tx.clone();
-    let send = move |cmd| {
-        let _ = tx.send(cmd);
-    };
-
-    // Settings: theme, refresh rate, start page, always on top, app history.
+    // Settings: theme, refresh rate, start page, always on top, app history, desktop widgets.
     let prefs = settings::Settings::load();
+    let widgets_enabled = prefs.desktop_widgets || widget_only;
     ui.set_theme_choice(prefs.theme);
     ui.set_refresh_index(prefs.refresh);
     ui.set_on_top(prefs.always_on_top);
     ui.set_app_history(prefs.app_history);
+    ui.set_desktop_widgets(widgets_enabled);
+    desktop_widgets.set_theme_choice(prefs.theme);
+    desktop_widgets.set_paused(prefs.refresh == 4);
+
     let start = match prefs.start_page.as_str() {
         "performance" => (1, Page::Performance),
         "details" => (2, Page::Details),
@@ -55,6 +60,20 @@ fn main() -> Result<(), slint::PlatformError> {
     };
     ui.set_start_page(start.0);
     ui.set_page(start.1);
+
+    let main_visible = Rc::new(Cell::new(!widget_only));
+    let widgets_visible = Rc::new(Cell::new(false));
+    let (tx, sampler_thread) = spawn_sampler(
+        ui.as_weak(),
+        desktop_widgets.as_weak(),
+        main_visible.get(),
+        false,
+    );
+    let quit = tx.clone();
+    let send = move |cmd| {
+        let _ = tx.send(cmd);
+    };
+
     send(Cmd::Page(start.1));
     if prefs.refresh != settings::Settings::default().refresh {
         send(Cmd::Interval(INTERVALS_MS[prefs.refresh as usize]));
@@ -63,10 +82,57 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_settings_changed({
         let send = send.clone();
         let ui = ui.as_weak();
+        let desktop_widgets = desktop_widgets.as_weak();
+        let widgets_visible = widgets_visible.clone();
         move || {
             let ui = ui.unwrap();
+            let wants_widgets = ui.get_desktop_widgets();
+            if wants_widgets && !widgets_visible.get() {
+                match desktop_widgets.upgrade() {
+                    Some(widget) => match widget.show() {
+                        Ok(()) => {
+                            widgets_visible.set(true);
+                            send(Cmd::WidgetsVisible(true));
+                        }
+                        Err(e) => {
+                            ui.set_desktop_widgets(false);
+                            ui.set_toast(format!("Couldn't show desktop widgets: {e}").into());
+                        }
+                    },
+                    None => {
+                        ui.set_desktop_widgets(false);
+                        ui.set_toast("Couldn't show desktop widgets".into());
+                    }
+                }
+            } else if !wants_widgets && widgets_visible.get() {
+                match desktop_widgets.upgrade() {
+                    Some(widget) => match widget.hide() {
+                        Ok(()) => {
+                            widgets_visible.set(false);
+                            send(Cmd::WidgetsVisible(false));
+                        }
+                        Err(e) => {
+                            ui.set_desktop_widgets(true);
+                            ui.set_toast(format!("Couldn't hide desktop widgets: {e}").into());
+                        }
+                    },
+                    None => {
+                        widgets_visible.set(false);
+                        send(Cmd::WidgetsVisible(false));
+                    }
+                }
+            }
+            if let Some(widget) = desktop_widgets.upgrade() {
+                widget.set_theme_choice(ui.get_theme_choice());
+                widget.set_paused(ui.get_refresh_index() == 4);
+            }
             save_settings(&ui);
-            send(Cmd::Interval(INTERVALS_MS.get(ui.get_refresh_index() as usize).copied().unwrap_or(1000)));
+            send(Cmd::Interval(
+                INTERVALS_MS
+                    .get(ui.get_refresh_index() as usize)
+                    .copied()
+                    .unwrap_or(1000),
+            ));
             send(Cmd::History(ui.get_app_history()));
         }
     });
@@ -77,9 +143,16 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.on_refresh_changed({
         let send = send.clone();
         let ui = ui.as_weak();
+        let desktop_widgets = desktop_widgets.as_weak();
         move |i| {
-            save_settings(&ui.unwrap());
-            send(Cmd::Interval(INTERVALS_MS.get(i as usize).copied().unwrap_or(1000)))
+            let ui = ui.unwrap();
+            if let Some(widget) = desktop_widgets.upgrade() {
+                widget.set_paused(i == 4);
+            }
+            save_settings(&ui);
+            send(Cmd::Interval(
+                INTERVALS_MS.get(i as usize).copied().unwrap_or(1000),
+            ))
         }
     });
     ui.on_page_changed({
@@ -140,8 +213,14 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     ui.on_affinity_apply({
         let ui = ui.as_weak();
+        let send = send.clone();
         move |k| {
-            let mask: String = ui.unwrap().get_affinity_cpus().iter().map(|on| if on { '1' } else { '0' }).collect();
+            let mask: String = ui
+                .unwrap()
+                .get_affinity_cpus()
+                .iter()
+                .map(|on| if on { '1' } else { '0' })
+                .collect();
             if mask.contains('1') {
                 send(Cmd::Action(format!("affinity:{mask}").into(), k));
             } else {
@@ -163,6 +242,97 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.unwrap().set_toast(msg.into());
         }
     });
+    ui.window().on_close_requested({
+        let main_visible = main_visible.clone();
+        let send = send.clone();
+        move || {
+            main_visible.set(false);
+            send(Cmd::MainVisible(false));
+            CloseRequestResponse::HideWindow
+        }
+    });
+    ui.on_close_main({
+        let ui = ui.as_weak();
+        let main_visible = main_visible.clone();
+        let send = send.clone();
+        move || {
+            let ui = ui.unwrap();
+            main_visible.set(false);
+            send(Cmd::MainVisible(false));
+            if let Err(e) = ui.hide() {
+                eprintln!("couldn't close TaskMonitor window: {e}");
+            }
+        }
+    });
+    desktop_widgets.on_open_main({
+        let ui = ui.as_weak();
+        let main_visible = main_visible.clone();
+        let send = send.clone();
+        move || {
+            let ui = ui.unwrap();
+            match ui.show() {
+                Ok(()) => {
+                    // Slint's cached minimized state can miss window-manager changes.
+                    let _ = slint::winit_030::WinitWindowAccessor::with_winit_window(
+                        ui.window(),
+                        |window| {
+                            window.set_minimized(false);
+                            window.focus_window();
+                        },
+                    );
+                    if !main_visible.replace(true) {
+                        send(Cmd::MainVisible(true));
+                        send(Cmd::Page(ui.get_page()));
+                    }
+                }
+                Err(e) => eprintln!("couldn't show TaskMonitor window: {e}"),
+            }
+        }
+    });
+    desktop_widgets.on_dismiss({
+        let ui = ui.as_weak();
+        let desktop_widgets = desktop_widgets.as_weak();
+        let widgets_visible = widgets_visible.clone();
+        let send = send.clone();
+        move || {
+            let ui = ui.unwrap();
+            let Some(widget) = desktop_widgets.upgrade() else {
+                widgets_visible.set(false);
+                ui.set_desktop_widgets(false);
+                save_settings(&ui);
+                send(Cmd::WidgetsVisible(false));
+                return;
+            };
+            match widget.hide() {
+                Ok(()) => {
+                    widgets_visible.set(false);
+                    ui.set_desktop_widgets(false);
+                    save_settings(&ui);
+                    send(Cmd::WidgetsVisible(false));
+                }
+                Err(e) => ui.set_toast(format!("Couldn't hide desktop widgets: {e}").into()),
+            }
+        }
+    });
+    desktop_widgets.on_quit(move || {
+        if let Err(e) = slint::quit_event_loop() {
+            eprintln!("couldn't quit TaskMonitor: {e}");
+        }
+    });
+    desktop_widgets.window().on_close_requested({
+        let ui = ui.as_weak();
+        let widgets_visible = widgets_visible.clone();
+        let send = send.clone();
+        move || {
+            widgets_visible.set(false);
+            send(Cmd::WidgetsVisible(false));
+            if let Some(ui) = ui.upgrade() {
+                ui.set_desktop_widgets(false);
+                save_settings(&ui);
+            }
+            CloseRequestResponse::HideWindow
+        }
+    });
     if let Ok(page) = std::env::var("TASKMONITOR_PAGE") {
         let page = match page.as_str() {
             "processes" => Page::Processes,
@@ -177,7 +347,10 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_page(page);
         ui.invoke_page_changed(page);
     }
-    if let Some(tab) = std::env::var("TASKMONITOR_TAB").ok().and_then(|t| t.parse().ok()) {
+    if let Some(tab) = std::env::var("TASKMONITOR_TAB")
+        .ok()
+        .and_then(|t| t.parse().ok())
+    {
         ui.set_perf_tab(tab);
         ui.invoke_perf_tab_changed(tab);
     }
@@ -186,7 +359,11 @@ fn main() -> Result<(), slint::PlatformError> {
     // Wayland compositors block outside screenshots, so this is how we check the UI.
     if let Ok(path) = std::env::var("TASKMONITOR_SNAPSHOT") {
         if let Ok(theme) = std::env::var("TASKMONITOR_THEME") {
-            ui.global::<Theme>().set_dark(theme == "dark");
+            if widget_only {
+                desktop_widgets.global::<Theme>().set_dark(theme == "dark");
+            } else {
+                ui.global::<Theme>().set_dark(theme == "dark");
+            }
         }
         // TASKMONITOR_OPEN=properties|affinity opens that dialog for TaskMonitor itself.
         let own = SharedString::from(format!("pid:{}", std::process::id()));
@@ -195,23 +372,40 @@ fn main() -> Result<(), slint::PlatformError> {
             Ok("affinity") => ui.invoke_affinity_query(own),
             _ => {}
         }
-        let delay = std::env::var("TASKMONITOR_SNAPSHOT_DELAY_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(800);
-        let weak = ui.as_weak();
-        slint::Timer::single_shot(Duration::from_millis(delay), move || {
-            let ui = weak.unwrap();
-            match ui.window().take_snapshot() {
-                Ok(img) => {
-                    let mut ppm = format!("P6 {} {} 255\n", img.width(), img.height()).into_bytes();
-                    ppm.extend(img.as_slice().iter().flat_map(|p| [p.r, p.g, p.b]));
-                    std::fs::write(&path, ppm).expect("write snapshot");
+        let delay = std::env::var("TASKMONITOR_SNAPSHOT_DELAY_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(800);
+        if widget_only {
+            let weak = desktop_widgets.as_weak();
+            slint::Timer::single_shot(Duration::from_millis(delay), move || {
+                let widgets = weak.unwrap();
+                save_snapshot(widgets.window(), &path);
+                if let Err(e) = slint::quit_event_loop() {
+                    eprintln!("couldn't quit after snapshot: {e}");
                 }
-                Err(e) => eprintln!("snapshot failed: {e}"),
-            }
-            let _ = slint::quit_event_loop();
-        });
+            });
+        } else {
+            let weak = ui.as_weak();
+            slint::Timer::single_shot(Duration::from_millis(delay), move || {
+                let ui = weak.unwrap();
+                save_snapshot(ui.window(), &path);
+                if let Err(e) = slint::quit_event_loop() {
+                    eprintln!("couldn't quit after snapshot: {e}");
+                }
+            });
+        }
     }
 
-    ui.run()?;
+    if widgets_enabled {
+        desktop_widgets.show()?;
+        widgets_visible.set(true);
+        send(Cmd::WidgetsVisible(true));
+    }
+    if !widget_only {
+        ui.show()?;
+    }
+    slint::run_event_loop()?;
     // Let the sampler save app history before the process exits.
     let _ = quit.send(Cmd::Quit);
     let _ = sampler_thread.join();
@@ -222,12 +416,25 @@ fn save_settings(ui: &MainWindow) {
     let prefs = settings::Settings {
         theme: ui.get_theme_choice(),
         refresh: ui.get_refresh_index(),
-        start_page: ["processes", "performance", "details"][ui.get_start_page().clamp(0, 2) as usize].into(),
+        start_page: ["processes", "performance", "details"]
+            [ui.get_start_page().clamp(0, 2) as usize]
+            .into(),
         always_on_top: ui.get_on_top(),
         app_history: ui.get_app_history(),
+        desktop_widgets: ui.get_desktop_widgets(),
     };
     if let Err(e) = prefs.save() {
         ui.set_toast(format!("Couldn't save settings: {e}").into());
+    }
+}
+fn save_snapshot(window: &slint::Window, path: &str) {
+    match window.take_snapshot() {
+        Ok(img) => {
+            let mut ppm = format!("P6 {} {} 255\n", img.width(), img.height()).into_bytes();
+            ppm.extend(img.as_slice().iter().flat_map(|p| [p.r, p.g, p.b]));
+            std::fs::write(path, ppm).expect("write snapshot");
+        }
+        Err(e) => eprintln!("snapshot failed: {e}"),
     }
 }
 
@@ -255,13 +462,20 @@ enum Cmd {
     /// (lock|terminate, session id)
     SessionAct(SharedString, SharedString),
     History(bool),
+    MainVisible(bool),
+    WidgetsVisible(bool),
     ClearHistory,
     Quit,
 }
 
-/// Samples on a background thread and pushes updates into the UI.
-/// Per-process data is only collected while a page that shows it is open.
-fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread::JoinHandle<()>) {
+/// Samples on a background thread and pushes updates into visible UI surfaces.
+/// Per-process data is only collected while the main window needs it or history is enabled.
+fn spawn_sampler(
+    ui: slint::Weak<MainWindow>,
+    widget_ui: slint::Weak<DesktopWidgets>,
+    main_visible: bool,
+    widgets_visible: bool,
+) -> (mpsc::Sender<Cmd>, std::thread::JoinHandle<()>) {
     let (tx, rx) = mpsc::channel::<Cmd>();
     let tx_back = tx.clone();
     let handle = std::thread::Builder::new()
@@ -288,10 +502,16 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
             let mut interval = Some(Duration::from_millis(1000));
             // The first tick comes quickly so the window doesn't sit on placeholders.
             let mut wait = Some(Duration::from_millis(250));
+            let mut main_visible = main_visible;
+            let mut widgets_visible = widgets_visible;
 
-            let push_rows = |view: &processes::View, page: Page, last: &(Snapshot, Vec<Process>), gpu_total: f32| {
+            let push_rows = |view: &processes::View,
+                             page: Page,
+                             last: &(Snapshot, Vec<Process>),
+                             gpu_total: f32| {
                 let rows = view.build(page, &last.1, &last.0, gpu_total);
-                ui.upgrade_in_event_loop(move |ui| processes::apply(&ui, rows)).is_ok()
+                ui.upgrade_in_event_loop(move |ui| processes::apply(&ui, rows))
+                    .is_ok()
             };
 
             loop {
@@ -299,7 +519,8 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                     Some(d) => rx.recv_timeout(d),
                     None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
                 };
-                let shows_procs = |p: Page| matches!(p, Page::Processes | Page::Details | Page::Users);
+                let shows_procs =
+                    |p: Page| matches!(p, Page::Processes | Page::Details | Page::Users);
                 match msg {
                     Ok(Cmd::Interval(ms)) => {
                         let resumed = interval.is_none() && ms > 0;
@@ -318,15 +539,19 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                         match cmd {
                             Cmd::Page(p) => {
                                 page = p;
-                                if p == Page::Startup {
+                                if main_visible && p == Page::Startup {
                                     push_startup(&ui);
                                 }
-                                if p == Page::Services {
+                                if main_visible && p == Page::Services {
                                     let svc = services.get_or_insert_with(Services::new);
-                                    service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                    service_list =
+                                        push_services(&ui, svc, service_bus, &view.filter);
+                                }
+                                if main_visible && p == Page::History {
+                                    push_history(&ui, usage_log.as_ref());
                                 }
                                 // Sample right away so the table isn't empty for a whole interval.
-                                if shows_procs(p) {
+                                if main_visible && shows_procs(p) {
                                     let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
                                     last.1 = ps.sample();
                                 }
@@ -338,10 +563,13 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                             Cmd::Sort(c) => view.set_sort(c),
                             Cmd::Filter(f) => {
                                 view.filter = f.to_string();
-                                if page == Page::Services {
-                                    let (rows, summary) = system_pages::service_rows(&service_list, &view.filter);
+                                if main_visible && page == Page::Services {
+                                    let (rows, summary) =
+                                        system_pages::service_rows(&service_list, &view.filter);
                                     let _ = ui.upgrade_in_event_loop(move |ui| {
-                                        bridge::sync(ui.get_service_rows(), rows, |m| ui.set_service_rows(m));
+                                        bridge::sync(ui.get_service_rows(), rows, |m| {
+                                            ui.set_service_rows(m)
+                                        });
                                         ui.set_service_summary(summary.into());
                                     });
                                     continue;
@@ -349,8 +577,11 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                             }
                             Cmd::ServiceBus(user) => {
                                 service_bus = if user { Bus::User } else { Bus::System };
-                                let svc = services.get_or_insert_with(Services::new);
-                                service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                if main_visible {
+                                    let svc = services.get_or_insert_with(Services::new);
+                                    service_list =
+                                        push_services(&ui, svc, service_bus, &view.filter);
+                                }
                                 continue;
                             }
                             Cmd::ServiceAct(verb, name) => {
@@ -361,7 +592,10 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                 if let Some(svc) = services.as_mut() {
                                     // Our own connection's cache is stale after another connection changed units.
                                     *svc = Services::new();
-                                    service_list = push_services(&ui, svc, service_bus, &view.filter);
+                                    if main_visible {
+                                        service_list =
+                                            push_services(&ui, svc, service_bus, &view.filter);
+                                    }
                                 }
                                 continue;
                             }
@@ -370,9 +604,13 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                     Ok(()) => None,
                                     Err(e) => Some(format!("Couldn't change startup setting: {e}")),
                                 };
-                                push_startup(&ui);
-                                if let Some(msg) = msg {
-                                    let _ = ui.upgrade_in_event_loop(move |ui| ui.set_toast(msg.into()));
+                                if main_visible {
+                                    push_startup(&ui);
+                                    if let Some(msg) = msg {
+                                        let _ = ui.upgrade_in_event_loop(move |ui| {
+                                            ui.set_toast(msg.into())
+                                        });
+                                    }
                                 }
                                 continue;
                             }
@@ -386,7 +624,9 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                 } else if !on && let Some(log) = usage_log.take() {
                                     let _ = log.save(&history_path);
                                 }
-                                push_history(&ui, usage_log.as_ref());
+                                if main_visible {
+                                    push_history(&ui, usage_log.as_ref());
+                                }
                                 continue;
                             }
                             Cmd::ClearHistory => {
@@ -395,7 +635,24 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                                     let _ = log.save(&history_path);
                                     usage_log = Some(log);
                                 }
-                                push_history(&ui, usage_log.as_ref());
+                                if main_visible {
+                                    push_history(&ui, usage_log.as_ref());
+                                }
+                                continue;
+                            }
+                            Cmd::MainVisible(visible) => {
+                                if !visible {
+                                    // `sample(false)` releases NVML immediately without waking NVIDIA.
+                                    let _ = gpu_sampler.sample(false);
+                                }
+                                main_visible = visible;
+                                if main_visible && page == Page::History {
+                                    push_history(&ui, usage_log.as_ref());
+                                }
+                                continue;
+                            }
+                            Cmd::WidgetsVisible(visible) => {
+                                widgets_visible = visible;
                                 continue;
                             }
                             Cmd::Quit => {
@@ -419,8 +676,11 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                             }
                             Cmd::Interval(_) => unreachable!(),
                         }
-                        if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
-                            break;
+                        if main_visible
+                            && shows_procs(page)
+                            && !push_rows(&view, page, &last, gpu_total)
+                        {
+                            main_visible = false;
                         }
                         continue;
                     }
@@ -429,19 +689,41 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                 }
                 wait = interval;
                 let snap = sampler.sample();
-                // NVIDIA is only queried where its numbers are shown (see gpu.rs on why).
-                let gpu_detail = page == Page::Processes || (page == Page::Performance && perf_tab == 2);
-                let (gpus, gpu_per_pid) = gpu_sampler.sample(gpu_detail);
+                if widgets_visible {
+                    let update = widgets::Update::from_snapshot(&snap);
+                    if widget_ui
+                        .upgrade_in_event_loop(move |widget| update.apply(&widget))
+                        .is_err()
+                    {
+                        widgets_visible = false;
+                    }
+                }
+                // Keep DRM per-process rates aligned with history records while the main
+                // window is hidden, but only request NVIDIA detail for the visible main view.
+                let history_record_due = usage_log.is_some() && (tick + 1).is_multiple_of(5);
+                let (gpus, gpu_per_pid) = if main_visible || history_record_due {
+                    let gpu_detail = main_visible
+                        && (page == Page::Processes
+                            || (page == Page::Performance && perf_tab == 2));
+                    gpu_sampler.sample(gpu_detail)
+                } else {
+                    Default::default()
+                };
                 gpu_total = gpus.iter().filter_map(|g| g.usage).fold(0.0, f32::max);
-                let update = bridge::build(&snap, &gpus, &mut histories);
-                if ui.upgrade_in_event_loop(move |ui| bridge::apply(&ui, update)).is_err() {
-                    break; // window closed
+                if main_visible {
+                    let update = bridge::build(&snap, &gpus, &mut histories);
+                    if ui
+                        .upgrade_in_event_loop(move |ui| bridge::apply(&ui, update))
+                        .is_err()
+                    {
+                        main_visible = false;
+                    }
                 }
                 last.0 = snap;
                 tick += 1;
                 // App history needs process samples even when no process page is open,
                 // but every 5th tick is enough: it accumulates rates times elapsed time.
-                let sample_procs = shows_procs(page) || (usage_log.is_some() && tick.is_multiple_of(5));
+                let sample_procs = (main_visible && shows_procs(page)) || history_record_due;
                 if sample_procs {
                     let ps = procs_sampler.get_or_insert_with(ProcessSampler::new);
                     last.1 = ps.sample();
@@ -458,20 +740,25 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
                     let _ = log.save(&history_path);
                     last_save = std::time::Instant::now();
                 }
-                if page == Page::History {
+                if main_visible && page == Page::History {
                     push_history(&ui, usage_log.as_ref());
                 }
-                if shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
-                    break;
+                if main_visible && shows_procs(page) && !push_rows(&view, page, &last, gpu_total) {
+                    main_visible = false;
                 }
-                if page == Page::Services {
+                if main_visible && page == Page::Services {
                     let svc = services.get_or_insert_with(Services::new);
                     service_list = push_services(&ui, svc, service_bus, &view.filter);
                 }
-                if page == Page::Users {
-                    let sessions: Vec<Session> = logind.get_or_insert_with(Logind::new).sessions().unwrap_or_default();
+                if main_visible && page == Page::Users {
+                    let sessions: Vec<Session> = logind
+                        .get_or_insert_with(Logind::new)
+                        .sessions()
+                        .unwrap_or_default();
                     let rows = system_pages::user_rows(&sessions, &last.1, &last.0);
-                    let _ = ui.upgrade_in_event_loop(move |ui| bridge::sync(ui.get_user_rows(), rows, |m| ui.set_user_rows(m)));
+                    let _ = ui.upgrade_in_event_loop(move |ui| {
+                        bridge::sync(ui.get_user_rows(), rows, |m| ui.set_user_rows(m))
+                    });
                 }
             }
         })
@@ -481,7 +768,9 @@ fn spawn_sampler(ui: slint::Weak<MainWindow>) -> (mpsc::Sender<Cmd>, std::thread
 
 /// Runs an action on its own thread: a polkit password prompt may block for a while.
 fn run_action(ui: &slint::Weak<MainWindow>, action: &str, key: &str, procs: Vec<Process>) {
-    let Some(action) = actions::Action::parse(action) else { return };
+    let Some(action) = actions::Action::parse(action) else {
+        return;
+    };
     let (ui, key) = (ui.clone(), key.to_owned());
     std::thread::spawn(move || {
         let msg = actions::perform(&action, &key, &procs);
@@ -490,11 +779,20 @@ fn run_action(ui: &slint::Weak<MainWindow>, action: &str, key: &str, procs: Vec<
 }
 
 fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
-    let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
-    let title = format!("{} (PID {pid})", actions::name_for_key(&format!("pid:{pid}"), procs));
+    let Some(&pid) = actions::pids_for_key(key, procs).first() else {
+        return;
+    };
+    let title = format!(
+        "{} (PID {pid})",
+        actions::name_for_key(&format!("pid:{pid}"), procs)
+    );
     let facts: Vec<Metric> = taskmonitor_core::actions::info(pid)
         .into_iter()
-        .map(|(label, value)| Metric { label: label.into(), value: value.into(), unit: "".into() })
+        .map(|(label, value)| Metric {
+            label: label.into(),
+            value: value.into(),
+            unit: "".into(),
+        })
         .collect();
     let _ = ui.upgrade_in_event_loop(move |ui| {
         ui.set_props_title(title.into());
@@ -504,7 +802,9 @@ fn show_properties(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
 }
 
 fn show_affinity(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
-    let Some(&pid) = actions::pids_for_key(key, procs).first() else { return };
+    let Some(&pid) = actions::pids_for_key(key, procs).first() else {
+        return;
+    };
     let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
     let title = actions::name_for_key(key, procs);
     let result = taskmonitor_core::actions::affinity(pid, cpus);
@@ -518,7 +818,12 @@ fn show_affinity(ui: &slint::Weak<MainWindow>, key: &str, procs: &[Process]) {
     });
 }
 
-fn push_services(ui: &slint::Weak<MainWindow>, svc: &Services, bus: Bus, filter: &str) -> Vec<Service> {
+fn push_services(
+    ui: &slint::Weak<MainWindow>,
+    svc: &Services,
+    bus: Bus,
+    filter: &str,
+) -> Vec<Service> {
     let list = match svc.list(bus) {
         Ok(list) => list,
         Err(e) => {
@@ -537,12 +842,25 @@ fn push_services(ui: &slint::Weak<MainWindow>, svc: &Services, bus: Bus, filter:
 
 fn push_startup(ui: &slint::Weak<MainWindow>) {
     let rows = system_pages::startup_rows(&taskmonitor_core::startup::list());
-    let _ = ui.upgrade_in_event_loop(move |ui| bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m)));
+    let _ = ui.upgrade_in_event_loop(move |ui| {
+        bridge::sync(ui.get_startup_rows(), rows, |m| ui.set_startup_rows(m))
+    });
 }
 
 /// systemd may show a password prompt, so this runs on its own thread with its own connection.
-fn service_action(ui: &slint::Weak<MainWindow>, done: &mpsc::Sender<Cmd>, bus: Bus, verb: &str, name: &str) {
-    let (ui, done, verb, unit) = (ui.clone(), done.clone(), verb.to_owned(), format!("{name}.service"));
+fn service_action(
+    ui: &slint::Weak<MainWindow>,
+    done: &mpsc::Sender<Cmd>,
+    bus: Bus,
+    verb: &str,
+    name: &str,
+) {
+    let (ui, done, verb, unit) = (
+        ui.clone(),
+        done.clone(),
+        verb.to_owned(),
+        format!("{name}.service"),
+    );
     std::thread::spawn(move || {
         let msg = match Services::new().control(bus, &verb, &unit) {
             Ok(()) => {
@@ -583,7 +901,12 @@ fn dbus_error(e: &zbus::Error) -> String {
 }
 
 fn push_history(ui: &slint::Weak<MainWindow>, log: Option<&AppUsageLog>) {
-    let (rows, since) = log.map_or_else(Default::default, |l| (system_pages::history_rows(l), system_pages::since_text(l.since)));
+    let (rows, since) = log.map_or_else(Default::default, |l| {
+        (
+            system_pages::history_rows(l),
+            system_pages::since_text(l.since),
+        )
+    });
     let _ = ui.upgrade_in_event_loop(move |ui| {
         bridge::sync(ui.get_history_rows(), rows, |m| ui.set_history_rows(m));
         ui.set_history_since(since.into());

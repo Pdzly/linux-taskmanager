@@ -54,84 +54,100 @@ export component SettingsPage inherits Card {
     in-out property <int> start-page;
     in-out property <bool> always-on-top;
     in-out property <bool> app-history;
+    in-out property <bool> desktop-widgets;
     in property <string> version;
     callback changed();
 
-    VerticalLayout {
-        padding: 28px;
-        spacing: 26px;
-        alignment: start;
+    Flickable {
+        width: parent.width;
+        height: parent.height;
 
-        Text { text: "Settings"; font-size: 22px; font-weight: 500; color: Theme.text; }
+        VerticalLayout {
+            width: parent.width;
+            padding: 28px;
+            spacing: 26px;
+            alignment: start;
 
-        Section {
-            title: "Theme";
-            Choice {
-                options: ["Match desktop", "Light", "Dark"];
-                current: root.theme;
-                picked(i) => {
-                    root.theme = i;
+            Text { text: "Settings"; font-size: 22px; font-weight: 500; color: Theme.text; }
+
+            Section {
+                title: "Theme";
+                Choice {
+                    options: ["Match desktop", "Light", "Dark"];
+                    current: root.theme;
+                    picked(i) => {
+                        root.theme = i;
+                        root.changed();
+                    }
+                }
+            }
+            Section {
+                title: "Update speed";
+                note: "How often numbers refresh. Faster uses a little more CPU.";
+                Choice {
+                    options: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
+                    current: root.refresh-index;
+                    picked(i) => {
+                        root.refresh-index = i;
+                        root.changed();
+                    }
+                }
+            }
+            Section {
+                title: "Open on";
+                Choice {
+                    options: ["Processes", "Performance", "Details"];
+                    current: root.start-page;
+                    picked(i) => {
+                        root.start-page = i;
+                        root.changed();
+                    }
+                }
+            }
+            Toggle {
+                text: "Always on top";
+                note: "Keep TaskMonitor above other windows. Works on X11; Wayland desktops don't allow apps to do this.";
+                on: root.always-on-top;
+                toggled => {
+                    root.always-on-top = !root.always-on-top;
                     root.changed();
                 }
             }
-        }
-        Section {
-            title: "Update speed";
-            note: "How often numbers refresh. Faster uses a little more CPU.";
-            Choice {
-                options: ["0.5 s", "1 s", "2 s", "5 s", "Paused"];
-                current: root.refresh-index;
-                picked(i) => {
-                    root.refresh-index = i;
+            Toggle {
+                text: "Desktop widgets";
+                note: "Keep the compact CPU, memory, disk and network panel on top and running after TaskMonitor closes. Start it without the main window with taskmonitor --widgets.";
+                on: root.desktop-widgets;
+                toggled => {
+                    root.desktop-widgets = !root.desktop-widgets;
                     root.changed();
                 }
             }
-        }
-        Section {
-            title: "Open on";
-            Choice {
-                options: ["Processes", "Performance", "Details"];
-                current: root.start-page;
-                picked(i) => {
-                    root.start-page = i;
+            Toggle {
+                text: "App history";
+                note: "Record how much CPU, disk and GPU time each app uses. Stored only on this computer.";
+                on: root.app-history;
+                toggled => {
+                    root.app-history = !root.app-history;
                     root.changed();
                 }
             }
-        }
-        Toggle {
-            text: "Always on top";
-            note: "Keep TaskMonitor above other windows. Works on X11; Wayland desktops don't allow apps to do this.";
-            on: root.always-on-top;
-            toggled => {
-                root.always-on-top = !root.always-on-top;
-                root.changed();
+            Section {
+                title: "About";
+                note: "TaskMonitor " + root.version + " · MIT License · github.com/anuzdhk/linux-taskmanager";
+                // Attribution required by the Slint royalty-free licence.
+                HorizontalLayout {
+                    alignment: start;
+                    AboutSlint { }
+                }
             }
-        }
-        Toggle {
-            text: "App history";
-            note: "Record how much CPU, disk and GPU time each app uses. Stored only on this computer.";
-            on: root.app-history;
-            toggled => {
-                root.app-history = !root.app-history;
-                root.changed();
-            }
-        }
-        Section {
-            title: "About";
-            note: "TaskMonitor " + root.version + " · MIT License · github.com/anuzdhk/linux-taskmanager";
-            // Attribution required by the Slint royalty-free licence.
-            HorizontalLayout {
-                alignment: start;
-                AboutSlint { }
-            }
-        }
-        Section {
-            title: "Keyboard shortcuts";
-            Text {
-                text: "Ctrl+1 – Ctrl+7  switch pages\nDelete  end the selected task\nEsc  close a dialog";
-                font-size: 12.5px;
-                font-family: Theme.mono;
-                color: Theme.text-2;
+            Section {
+                title: "Keyboard shortcuts";
+                Text {
+                    text: "Ctrl+1 – Ctrl+7  switch pages\nCtrl+W  close TaskMonitor\nDelete  end the selected task\nEsc  close a dialog";
+                    font-size: 12.5px;
+                    font-family: Theme.mono;
+                    color: Theme.text-2;
+                }
             }
         }
     }
