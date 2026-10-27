@@ -34,6 +34,19 @@ font = TTFont(font_path)
 sub = subset.Subsetter(opts)
 sub.populate(unicodes=[cp for _, cp in icons])
 sub.subset(font)
+
+# Lucide outlines are centered in their 1000-unit advance width, but their
+# hmtx side bearings are zero. Slint centers the advance box, so retain each
+# nonempty glyph's actual left extent as its LSB to center the rendered ink.
+glyf = font["glyf"]
+hmtx = font["hmtx"]
+for glyph_name in font.getGlyphOrder():
+    glyph = glyf[glyph_name]
+    if glyph.numberOfContours == 0 and not glyph.isComposite():
+        continue
+    advance_width, _ = hmtx[glyph_name]
+    hmtx[glyph_name] = advance_width, glyph.xMin
+
 out_font = root / "crates/app/fonts/lucide-subset.ttf"
 font.save(out_font)
 family = font["name"].getDebugName(1)
